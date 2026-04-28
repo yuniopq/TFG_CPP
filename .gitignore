@@ -1,0 +1,41 @@
+# --- Binarios y Ejecutables ---
+# Ignora el ejecutable principal
+bch_test
+bch_test.exe
+*.out
+*.app
+
+# --- Objetos y Librerías ---
+# Ignora los archivos .o generados por el Makefile
+*.o
+*.a
+*.so
+*.lib
+
+# --- Directorio de Build ---
+# Ignora todo lo que metas en la carpeta build para limpiar el proyecto
+build/
+
+# --- IDEs y Editores ---
+# Ignora la configuración local de VS Code
+.vscode/
+.history/
+*.swp
+*~
+
+# --- Archivos de Sistema ---
+.DS_Store
+Thumbs.db
+
+# --- Python (Scripts de simulación) ---
+# Si usas python para los plots, ignoramos su basura
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+
+# --- Resultados de Simulación ---
+# A veces es mejor no subir miles de CSVs pesados a GitHub
+# Descomenta las siguientes líneas si quieres ignorar los resultados
+# results/csv/*.csv
+# results/plots/*.png

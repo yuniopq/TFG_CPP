@@ -1,1 +1,0 @@
-g++ -Iinclude src/main.cpp src/core/GaloisField.cpp -o bch_test.exe

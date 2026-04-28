@@ -1,6 +1,6 @@
 #include "../../include/GaloisField.h"
 
-GaloisField::GaloisField(int m, int prymitive_poly){
+GaloisField::GaloisField(int m, int primitive_poly){
     this->m = m;
     size = 1<<m;  // 2^m
     

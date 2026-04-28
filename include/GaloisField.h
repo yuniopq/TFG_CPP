@@ -17,7 +17,7 @@ private:
     vector<int> log_table;  // Log table
     
 public:
-    GaloisField(int m, int prymitive_poly);
+    GaloisField(int m, int primitive_poly);
     int add(int a, int b);
     int multiply(int a, int b);
     int divide(int a, int b);
