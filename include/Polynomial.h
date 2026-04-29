@@ -10,7 +10,7 @@ using namespace std;
 class Polynomial{
 private:    
     vector<int> coef;       // coef[0] + coef[1]·x + coef[2]·x^2 + ...
-    const GaloisField& gf;
+    const GaloisField* gf;
     void trim();
 
 public:

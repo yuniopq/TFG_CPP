@@ -1,6 +1,6 @@
 #include "Polynomial.h"
 
-Polynomial::Polynomial(const GaloisField &galoisField, const vector<int> &coefficients): coef(coefficients), gf(galoisField) {
+Polynomial::Polynomial(const GaloisField &galoisField, const vector<int> &coefficients): coef(coefficients), gf(&galoisField) {
     trim();
 }
 
@@ -44,36 +44,36 @@ int Polynomial::setCoef(int degree, int value)
 Polynomial Polynomial::add(const Polynomial &p2) const
 {
     if (coef.empty()) {
-        return Polynomial(gf, p2.coef);
+        return Polynomial(*gf, p2.coef);
     }
     if (p2.coef.empty()) {
-        return Polynomial(gf, coef);
+        return Polynomial(*gf, coef);
     }
 
     vector<int> result_coef(max(coef.size(), p2.coef.size()), 0);
     for (size_t i = 0; i < result_coef.size(); i++) {
         int c1 = (i < coef.size()) ? coef[i] : 0;
         int c2 = (i < p2.coef.size()) ? p2.coef[i] : 0;
-        result_coef[i] = gf.add(c1, c2);
+        result_coef[i] = gf->add(c1, c2);
     }
-    Polynomial res(gf, result_coef);
+    Polynomial res(*gf, result_coef);
     res.trim();
     return res;
 }
 
 Polynomial Polynomial::multiply(const Polynomial &p2) const{
     if (coef.empty() || p2.coef.empty()) {
-        return Polynomial(gf, {});
+        return Polynomial(*gf, {});
     }
 
     vector<int> result_coef(coef.size() + p2.coef.size() - 1, 0);
     
     for(size_t i = 0; i < coef.size(); i++){
         for(size_t j=0; j<p2.coef.size(); j++){
-            result_coef[i+j] = gf.add(result_coef[i+j], gf.multiply(coef[i], p2.coef[j]));
+            result_coef[i+j] = gf->add(result_coef[i+j], gf->multiply(coef[i], p2.coef[j]));
         }
     }
-    Polynomial res(gf, result_coef);
+    Polynomial res(*gf, result_coef);
     res.trim();
     return res;
 }
@@ -95,7 +95,7 @@ int Polynomial::evaluate(int x) {
     
     // Recorremos de mayor a menor grado: res = (...((a_n*x + a_n-1)*x + ...)*x + a_0)
     for (int i = getDegree(); i >= 0; i--) {
-        res = gf.add(gf.multiply(res, x), getCoef(i));
+        res = gf->add(gf->multiply(res, x), getCoef(i));
     }
     return res;
 }
