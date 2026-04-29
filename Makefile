@@ -8,7 +8,8 @@ TARGET   = bch_test
 # Los demás están en src/core/
 SRCS = src/main.cpp \
        src/core/GaloisField.cpp \
-       src/core/Polynomial.cpp
+       src/core/Polynomial.cpp \
+       src/core/BCH_Codec.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
