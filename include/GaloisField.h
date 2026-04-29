@@ -18,11 +18,11 @@ private:
     
 public:
     GaloisField(int m, int primitive_poly);
-    int add(int a, int b);
-    int multiply(int a, int b);
-    int divide(int a, int b);
-    int inverse(int a);
-    int power(int a, int e);
+    int add(int a, int b) const;
+    int multiply(int a, int b) const;
+    int divide(int a, int b) const;
+    int inverse(int a) const;
+    int power(int a, int e) const;
 
 
 };

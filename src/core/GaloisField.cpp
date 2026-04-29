@@ -1,4 +1,5 @@
 #include "../../include/GaloisField.h"
+#include <stdexcept>
 
 GaloisField::GaloisField(int m, int primitive_poly): m(m), primitive_poly(primitive_poly) {
     size = 1<<m;  // 2^m
@@ -26,29 +27,44 @@ GaloisField::GaloisField(int m, int primitive_poly): m(m), primitive_poly(primit
 
 }
 
-int GaloisField::add(int a, int b){
+int GaloisField::add(int a, int b) const{
     return a^b;
 }
 
-int GaloisField::multiply(int a, int b){
+int GaloisField::multiply(int a, int b) const{
+    if (a < 0 || a >= size || b < 0 || b >= size) {
+        throw out_of_range("Field element out of range");
+    }
     if (a==0||b==0) return 0;
     return exp_table[log_table[a] + log_table[b]];
 }
 
-int GaloisField::divide(int a, int b){
-    if (b==0)   __throw_runtime_error("Division by zero");
+int GaloisField::divide(int a, int b) const{
+    if (a < 0 || a >= size || b < 0 || b >= size) {
+        throw out_of_range("Field element out of range");
+    }
+    if (b==0)   throw runtime_error("Division by zero");
     if (a==0)   return 0;
     return exp_table[log_table[a] - log_table[b] + (size-1)];
 }
 
-int GaloisField::power(int a, int e){
+int GaloisField::power(int a, int e) const{
+    if (a < 0 || a >= size) {
+        throw out_of_range("Field element out of range");
+    }
     if (a == 0) return 0;
     if (e == 0) return 1;
+    if (e < 0) {
+        throw invalid_argument("Negative exponent not supported");
+    }
     int exp = log_table[a]*e % (size-1);
     return exp_table[exp];
 }
 
-int GaloisField::inverse(int a) {
-    if (a == 0) __throw_runtime_error("Cannot invert zero");
+int GaloisField::inverse(int a) const {
+    if (a < 0 || a >= size) {
+        throw out_of_range("Field element out of range");
+    }
+    if (a == 0) throw runtime_error("Cannot invert zero");
     return exp_table[(size - 1) - log_table[a]];
 }
