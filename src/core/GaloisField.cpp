@@ -1,7 +1,6 @@
 #include "../../include/GaloisField.h"
 
-GaloisField::GaloisField(int m, int primitive_poly){
-    this->m = m;
+GaloisField::GaloisField(int m, int primitive_poly): m(m), primitive_poly(primitive_poly) {
     size = 1<<m;  // 2^m
     
     log_table.resize(size);
