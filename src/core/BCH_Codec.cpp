@@ -47,11 +47,15 @@ vector<int> BCH_Codec::encode(const vector<int>& message) {
     // Full implementation would compute message * x^(n-k) mod generator_poly
     
     vector<int> encoded = message;
-    
-    // Add (n - k) parity bits (simplified)
-    int parity_bits = n - k;
-    for (int i = 0; i < parity_bits; i++) {
-        encoded.push_back(0);
+    vector<int> parity(n - k, 0);
+
+    for(int i=message.size()-1; i>=0; i--){
+        int coef = encoded[i];
+        if (coef != 0) {
+            for(size_t j=0; j<generator->getDegree(); j++){
+                parity[j] = gf.add(parity[j], gf.multiply(coef, generator->getCoef(j)));
+            }
+        }
     }
     
     return encoded;
