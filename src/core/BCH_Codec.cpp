@@ -43,22 +43,22 @@ void BCH_Codec::computeGeneratorPolynomial() {
 }
 
 vector<int> BCH_Codec::encode(const vector<int>& message) {
-    // Placeholder: concatenate message with parity bits
-    // Full implementation would compute message * x^(n-k) mod generator_poly
-    
-    vector<int> encoded = message;
-    vector<int> parity(n - k, 0);
 
-    for(int i=message.size()-1; i>=0; i--){
-        int coef = encoded[i];
-        if (coef != 0) {
-            for(size_t j=0; j<generator->getDegree(); j++){
-                parity[j] = gf.add(parity[j], gf.multiply(coef, generator->getCoef(j)));
-            }
+    vector<int> parity(generator->getDegree(), 0);
+    for (int i = message.size()-1; i>=0; i--){
+        int MSB = parity.back();
+        for(int j = parity.size()-1; j>0; j--){
+            parity[j] = parity[j-1];
+        }
+        parity[0] = message[i];
+        if(MSB == 1){
+            for( int j=0; j<parity.size(); j++)
+                parity[j]^=generator->getCoef(i);
         }
     }
-    
-    return encoded;
+
+    parity.insert(parity.end(), message.begin(), message.end());
+    return parity;
 }
 
 vector<int> BCH_Codec::decode(const vector<int>& received) {
