@@ -33,7 +33,7 @@ int GaloisField::add(int a, int b) const{
 
 int GaloisField::multiply(int a, int b) const{
     if (a < 0 || a >= size || b < 0 || b >= size) {
-        throw out_of_range("Field element out of range");
+        throw std::out_of_range("Field element out of range");
     }
     if (a==0||b==0) return 0;
     return exp_table[log_table[a] + log_table[b]];
@@ -41,21 +41,21 @@ int GaloisField::multiply(int a, int b) const{
 
 int GaloisField::divide(int a, int b) const{
     if (a < 0 || a >= size || b < 0 || b >= size) {
-        throw out_of_range("Field element out of range");
+        throw std::out_of_range("Field element out of range");
     }
-    if (b==0)   throw runtime_error("Division by zero");
+    if (b==0)   throw std::runtime_error("Division by zero");
     if (a==0)   return 0;
     return exp_table[log_table[a] - log_table[b] + (size-1)];
 }
 
 int GaloisField::power(int a, int e) const{
     if (a < 0 || a >= size) {
-        throw out_of_range("Field element out of range");
+        throw std::out_of_range("Field element out of range");
     }
     if (a == 0) return 0;
     if (e == 0) return 1;
     if (e < 0) {
-        throw invalid_argument("Negative exponent not supported");
+        throw std::invalid_argument("Negative exponent not supported");
     }
     int exp = log_table[a]*e % (size-1);
     return exp_table[exp];
@@ -63,8 +63,8 @@ int GaloisField::power(int a, int e) const{
 
 int GaloisField::inverse(int a) const {
     if (a < 0 || a >= size) {
-        throw out_of_range("Field element out of range");
+        throw std::out_of_range("Field element out of range");
     }
-    if (a == 0) throw runtime_error("Cannot invert zero");
+    if (a == 0) throw std::runtime_error("Cannot invert zero");
     return exp_table[(size - 1) - log_table[a]];
 }

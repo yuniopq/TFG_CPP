@@ -3,8 +3,6 @@
 
 #include <vector>
 
-using namespace std;
-
 class GaloisField{
 
 private:
@@ -13,8 +11,8 @@ private:
     int size;               // 2^m
     int primitive_poly;     // Primitive Polynomial
 
-    vector<int> exp_table;  // Antilog table
-    vector<int> log_table;  // Log table
+    std::vector<int> exp_table;  // Antilog table
+    std::vector<int> log_table;  // Log table
     
 public:
     GaloisField(int m, int primitive_poly);
