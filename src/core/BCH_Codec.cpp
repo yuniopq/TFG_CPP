@@ -43,9 +43,9 @@ void BCH_Codec::computeGeneratorPolynomial() {
     }
 }
 
-std::vector<int> BCH_Codec::encode(const std::vector<int>& message) {
+std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
 
-    std::vector<int> parity(generator.getDegree(), 0);
+    std::vector<uint16_t> parity(generator.getDegree(), 0);
     for (int i = message.size()-1; i>=0; i--){
         uint16_t MSB = parity.back();
         for(std::size_t j = parity.size()-1; j>0; j--){
@@ -62,9 +62,9 @@ std::vector<int> BCH_Codec::encode(const std::vector<int>& message) {
     return parity;
 }
 
-std::vector<int> BCH_Codec::encodeLFSR(const std::vector<int> &message) {
+std::vector<uint16_t> BCH_Codec::encodeLFSR(const std::vector<uint16_t> &message) {
 
-    std::vector<int> parity(n - k, 0);
+    std::vector<uint16_t> parity(n - k, 0);
     for (int i = message.size()-1; i>=0; i--){
         uint16_t MSB = parity.back();
         uint16_t b = message[i];
@@ -85,12 +85,12 @@ std::vector<int> BCH_Codec::encodeLFSR(const std::vector<int> &message) {
     return parity;
 }
 
-std::vector<int> BCH_Codec::decode(const std::vector<int>& received) {
+std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
     // Placeholder: assume no errors and return message part
     // Full implementation would compute syndrome, find error locations, correct
     
     size_t msg_size = std::min(static_cast<size_t>(k), received.size());
-    std::vector<int> decoded(received.begin(), received.begin() + msg_size);
+    std::vector<uint16_t> decoded(received.begin(), received.begin() + msg_size);
     
     return decoded;
 }

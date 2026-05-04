@@ -4,7 +4,7 @@
 #include "../include/Polynomial.h"
 using namespace std;
 // Función para imprimir vectores sin saturar la pantalla si son muy grandes
-void printVector(const string& label, const vector<int>& vec) {
+void printVector(const string& label, const vector<uint16_t>& vec) {
     cout << label << " (" << vec.size() << " bits): [ ";
     int limit = min((int)vec.size(), 30); // Solo imprime los primeros 30 bits para no llenar la consola
     for (int i = 0; i < limit; i++) {
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
         cout << "========================================" << endl;
 
         // Generamos un mensaje dinámico exactamente del tamaño 'k'
-        vector<int> message(k);
+        vector<uint16_t> message(k);
         for(int i = 0; i < k; i++) {
             message[i] = rand() % 2; // Rellena con 0s y 1s aleatorios
         }
@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
         cout << "\n--- FASE DE CODIFICACION ---" << endl;
         printVector("Mensaje original", message);
 
-        vector<int> encoded = bch.encode(message);
+        vector<uint16_t> encoded = bch.encode(message);
         printVector("Mensaje Transmitido", encoded);
         
         // Comprobación de que es sistemático

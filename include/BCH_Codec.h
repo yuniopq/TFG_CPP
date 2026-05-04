@@ -22,12 +22,12 @@ public:
     BCH_Codec(int m, int t, int primitive_poly);
     
     // Encode: add parity bits to message
-    std::vector<int> encode(const std::vector<int>& message);
+    std::vector<uint16_t> encode(const std::vector<uint16_t>& message);
 
-    std::vector<int> encodeLFSR(const std::vector<int> &message);
+    std::vector<uint16_t> encodeLFSR(const std::vector<uint16_t> &message);
 
     // Decode: detect and correct errors
-    std::vector<int> decode(const std::vector<int>& received);
+    std::vector<uint16_t> decode(const std::vector<uint16_t>& received);
     
     // Get parameters
     int getN() const { return n; }

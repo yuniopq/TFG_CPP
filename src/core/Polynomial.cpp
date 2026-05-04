@@ -5,7 +5,7 @@ Polynomial::Polynomial(const GaloisField &galoisField, const std::vector<uint16_
     trim();
 }
 
-uint16_t Polynomial::getDegree() const
+int Polynomial::getDegree() const
 {
     if (coef.empty()) {
         return -1;
