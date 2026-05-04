@@ -20,17 +20,17 @@ BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
 
 void BCH_Codec::computeGeneratorPolynomial() {
     // Initialize generator as polynomial 1
-    generator = Polynomial(gf, std::vector<int>{1});
-    std::unordered_set<int> processed_exp;
+    generator = Polynomial(gf, std::vector<uint16_t>{1});
+    std::unordered_set<uint16_t> processed_exp;
 
-    for (int i = 1; i <= 2 * t; i++) {
+    for (uint16_t i = 1; i <= 2 * t; i++) {
         if (processed_exp.count(i)) continue;
 
         Polynomial mi(gf, {1});
-        int currExp = i;
+        uint16_t currExp = i;
         
         do {
-            int root = gf.power(2, currExp); // a^i
+            uint16_t root = gf.power(2, currExp); // a^i
             // mi(x) = mi(x) * (x + root)
             mi = mi * Polynomial(gf, {root, 1});
             
@@ -39,7 +39,7 @@ void BCH_Codec::computeGeneratorPolynomial() {
         } while (currExp != i);
 
         // Multiplicamos el generador acumulado por el nuevo polinomio mínimo
-        generator = (generator) * mi;
+        generator = generator * mi;
     }
 }
 
@@ -47,7 +47,7 @@ std::vector<int> BCH_Codec::encode(const std::vector<int>& message) {
 
     std::vector<int> parity(generator.getDegree(), 0);
     for (int i = message.size()-1; i>=0; i--){
-        int MSB = parity.back();
+        uint16_t MSB = parity.back();
         for(std::size_t j = parity.size()-1; j>0; j--){
             parity[j] = parity[j-1];
         }
@@ -66,9 +66,9 @@ std::vector<int> BCH_Codec::encodeLFSR(const std::vector<int> &message) {
 
     std::vector<int> parity(n - k, 0);
     for (int i = message.size()-1; i>=0; i--){
-        int MSB = parity.back();
-        int b = message[i];
-        int feedback = MSB ^ b;
+        uint16_t MSB = parity.back();
+        uint16_t b = message[i];
+        uint16_t feedback = MSB ^ b;
         if(feedback == 1){
             for (int j = parity.size()-1; j>0; j--){
                 parity[j] = parity[j-1] ^ generator.getCoef(j);

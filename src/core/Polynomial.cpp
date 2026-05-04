@@ -1,19 +1,19 @@
 #include "Polynomial.h"
 
-Polynomial::Polynomial(const GaloisField &galoisField, const std::vector<int> &coefficients)
+Polynomial::Polynomial(const GaloisField &galoisField, const std::vector<uint16_t> &coefficients)
     : coef(coefficients), gf(galoisField) { // Se copia el objeto ligero
     trim();
 }
 
-int Polynomial::getDegree() const
+uint16_t Polynomial::getDegree() const
 {
     if (coef.empty()) {
         return -1;
     }
-    return static_cast<int>(coef.size()) - 1;
+    return static_cast<uint16_t>(coef.size()) - 1;
 }
 
-int Polynomial::getCoef(int degree) const
+uint16_t Polynomial::getCoef(int degree) const
 {
     if (degree < 0) {
         return 0;
@@ -27,7 +27,7 @@ int Polynomial::getCoef(int degree) const
     return coef[index];
 }
 
-int Polynomial::setCoef(int degree, int value)
+uint16_t Polynomial::setCoef(int degree, uint16_t value)
 {
     if (degree < 0) {
         return -1;
@@ -52,10 +52,10 @@ Polynomial Polynomial::add(const Polynomial &p2) const
         return Polynomial(gf, coef);
     }
 
-    std::vector<int> result_coef(std::max(coef.size(), p2.coef.size()), 0);
+    std::vector<uint16_t> result_coef(std::max(coef.size(), p2.coef.size()), 0);
     for (size_t i = 0; i < result_coef.size(); i++) {
-        int c1 = (i < coef.size()) ? coef[i] : 0;
-        int c2 = (i < p2.coef.size()) ? p2.coef[i] : 0;
+        uint16_t c1 = (i < coef.size()) ? coef[i] : 0;
+        uint16_t c2 = (i < p2.coef.size()) ? p2.coef[i] : 0;
         result_coef[i] = gf.add(c1, c2);
     }
     Polynomial res(gf, result_coef);
@@ -68,7 +68,7 @@ Polynomial Polynomial::multiply(const Polynomial &p2) const{
         return Polynomial(gf, {});
     }
 
-    std::vector<int> result_coef(coef.size() + p2.coef.size() - 1, 0);
+    std::vector<uint16_t> result_coef(coef.size() + p2.coef.size() - 1, 0);
     
     for(size_t i = 0; i < coef.size(); i++){
         for(size_t j=0; j<p2.coef.size(); j++){
@@ -88,13 +88,13 @@ Polynomial Polynomial::operator*(const Polynomial &p2) const {
     return multiply(p2);
 }
 
-int Polynomial::evaluate(int x) {
+uint16_t Polynomial::evaluate(uint16_t x) {
     if (coef.empty()) {
         return 0;
     }
     if (x == 0) return getCoef(0);
-    int res = 0;
-    
+    uint16_t res = 0;
+
     // Recorremos de mayor a menor grado: res = (...((a_n*x + a_n-1)*x + ...)*x + a_0)
     for (int i = getDegree(); i >= 0; i--) {
         res = gf.add(gf.multiply(res, x), getCoef(i));

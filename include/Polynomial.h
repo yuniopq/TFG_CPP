@@ -7,15 +7,15 @@
 
 class Polynomial{
 private:    
-    std::vector<int> coef;       // coef[0] + coef[1]·x + coef[2]·x^2 + ...
+    std::vector<uint16_t> coef;       // coef[0] + coef[1]·x + coef[2]·x^2 + ...
     GaloisField gf;
     void trim();
 
 public:
-    Polynomial(const GaloisField &galoisField, const std::vector<int> &coefficients);
-    int getDegree() const;
-    int getCoef(int degree) const;
-    int setCoef(int degree, int value);
+    Polynomial(const GaloisField &galoisField, const std::vector<uint16_t> &coefficients);
+    uint16_t getDegree() const;
+    uint16_t getCoef(int degree) const;
+    uint16_t setCoef(int degree, uint16_t value);
 
     Polynomial add(const Polynomial& p2) const;
     Polynomial multiply(const Polynomial& p2) const;
@@ -24,7 +24,7 @@ public:
     Polynomial operator+(const Polynomial& p2) const;
     Polynomial operator*(const Polynomial& p2) const;
 
-    int evaluate(int x);
+    uint16_t evaluate(uint16_t x);
 
     void print();
 

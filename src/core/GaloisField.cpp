@@ -2,8 +2,8 @@
 #include <stdexcept>
 
 // Inicialización de estáticos (fuera de la clase)
-std::vector<int> GaloisField::log_table;
-std::vector<int> GaloisField::exp_table;
+std::vector<uint16_t> GaloisField::log_table;
+std::vector<uint16_t> GaloisField::exp_table;
 int GaloisField::initialized_m = -1;
 
 GaloisField::GaloisField(int m, int primitive_poly) 
@@ -32,11 +32,11 @@ GaloisField::GaloisField(int m, int primitive_poly)
     }
 }
 
-int GaloisField::add(int a, int b) const{
+uint16_t GaloisField::add(uint16_t a, uint16_t b) const{
     return a^b;
 }
 
-int GaloisField::multiply(int a, int b) const{
+uint16_t GaloisField::multiply(uint16_t a, uint16_t b) const{
     if (a < 0 || a >= size || b < 0 || b >= size) {
         throw std::out_of_range("Field element out of range");
     }
@@ -44,7 +44,7 @@ int GaloisField::multiply(int a, int b) const{
     return exp_table[log_table[a] + log_table[b]];
 }
 
-int GaloisField::divide(int a, int b) const{
+uint16_t GaloisField::divide(uint16_t a, uint16_t b) const{
     if (a < 0 || a >= size || b < 0 || b >= size) {
         throw std::out_of_range("Field element out of range");
     }
@@ -53,7 +53,7 @@ int GaloisField::divide(int a, int b) const{
     return exp_table[log_table[a] - log_table[b] + (size-1)];
 }
 
-int GaloisField::power(int a, int e) const{
+uint16_t GaloisField::power(uint16_t a, int e) const{
     if (a < 0 || a >= size) {
         throw std::out_of_range("Field element out of range");
     }
@@ -66,7 +66,7 @@ int GaloisField::power(int a, int e) const{
     return exp_table[exp];
 }
 
-int GaloisField::inverse(int a) const {
+uint16_t GaloisField::inverse(uint16_t a) const {
     if (a < 0 || a >= size) {
         throw std::out_of_range("Field element out of range");
     }
