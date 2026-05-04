@@ -10,7 +10,7 @@ int Polynomial::getDegree() const
     if (coef.empty()) {
         return -1;
     }
-    return static_cast<uint16_t>(coef.size()) - 1;
+    return static_cast<int>(coef.size()) - 1;
 }
 
 uint16_t Polynomial::getCoef(int degree) const
@@ -27,7 +27,7 @@ uint16_t Polynomial::getCoef(int degree) const
     return coef[index];
 }
 
-uint16_t Polynomial::setCoef(int degree, uint16_t value)
+int Polynomial::setCoef(int degree, uint16_t value)
 {
     if (degree < 0) {
         return -1;

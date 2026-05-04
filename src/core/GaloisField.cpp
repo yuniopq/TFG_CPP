@@ -37,7 +37,7 @@ uint16_t GaloisField::add(uint16_t a, uint16_t b) const{
 }
 
 uint16_t GaloisField::multiply(uint16_t a, uint16_t b) const{
-    if (a < 0 || a >= size || b < 0 || b >= size) {
+    if ( a >= size || b >= size) {
         throw std::out_of_range("Field element out of range");
     }
     if (a==0||b==0) return 0;
@@ -45,7 +45,7 @@ uint16_t GaloisField::multiply(uint16_t a, uint16_t b) const{
 }
 
 uint16_t GaloisField::divide(uint16_t a, uint16_t b) const{
-    if (a < 0 || a >= size || b < 0 || b >= size) {
+    if (a >= size || b >= size) {
         throw std::out_of_range("Field element out of range");
     }
     if (b==0)   throw std::runtime_error("Division by zero");
@@ -54,7 +54,7 @@ uint16_t GaloisField::divide(uint16_t a, uint16_t b) const{
 }
 
 uint16_t GaloisField::power(uint16_t a, int e) const{
-    if (a < 0 || a >= size) {
+    if (a >= size) {
         throw std::out_of_range("Field element out of range");
     }
     if (a == 0) return 0;
@@ -67,7 +67,7 @@ uint16_t GaloisField::power(uint16_t a, int e) const{
 }
 
 uint16_t GaloisField::inverse(uint16_t a) const {
-    if (a < 0 || a >= size) {
+    if (a >= size) {
         throw std::out_of_range("Field element out of range");
     }
     if (a == 0) throw std::runtime_error("Cannot invert zero");

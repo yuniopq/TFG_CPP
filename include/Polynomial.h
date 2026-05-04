@@ -15,7 +15,7 @@ public:
     Polynomial(const GaloisField &galoisField, const std::vector<uint16_t> &coefficients);
     int getDegree() const;
     uint16_t getCoef(int degree) const;
-    uint16_t setCoef(int degree, uint16_t value);
+    int setCoef(int degree, uint16_t value);
 
     Polynomial add(const Polynomial& p2) const;
     Polynomial multiply(const Polynomial& p2) const;

@@ -1,4 +1,3 @@
-#include "../../include/BCH_Codec.h"
 #include <iostream>
 #include <stdexcept>
 #include "BCH_Codec.h"
