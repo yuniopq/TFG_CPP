@@ -8,12 +8,11 @@
 class Polynomial{
 private:    
     std::vector<int> coef;       // coef[0] + coef[1]·x + coef[2]·x^2 + ...
-    const GaloisField* gf;
+    GaloisField gf;
     void trim();
 
 public:
-    Polynomial(const GaloisField& galoisField, const std::vector<int>& coefficients);
-
+    Polynomial(const GaloisField &galoisField, const std::vector<int> &coefficients);
     int getDegree() const;
     int getCoef(int degree) const;
     int setCoef(int degree, int value);

@@ -1,30 +1,35 @@
 #include "../../include/GaloisField.h"
 #include <stdexcept>
 
-GaloisField::GaloisField(int m, int primitive_poly): m(m), primitive_poly(primitive_poly) {
-    size = 1<<m;  // 2^m
+// Inicialización de estáticos (fuera de la clase)
+std::vector<int> GaloisField::log_table;
+std::vector<int> GaloisField::exp_table;
+int GaloisField::initialized_m = -1;
+
+GaloisField::GaloisField(int m, int primitive_poly) 
+    : m(m), primitive_poly(primitive_poly) {
     
-    log_table.resize(size);
-    exp_table.resize(2*size);
+    size = 1 << m;
 
-    int val=1;
-    for (int i = 0; i < size-1; i++){   //size-1 bcos there is no "0"
-    
-        exp_table[i] = val;
-        log_table[val] = i;
-        
-        val <<= 1;                      // val*=2
-        if (val & size)                 // if (val >= size)
-            val ^= primitive_poly;      // val %= primitive_poly
+    // Solo calculamos si es un campo nuevo
+    if (initialized_m != m) {
+        log_table.assign(size, 0);
+        exp_table.assign(2 * size, 0);
+
+        int val = 1;
+        for (int i = 0; i < size - 1; i++) {
+            exp_table[i] = val;
+            log_table[val] = i;
+            val <<= 1;
+            if (val & size) val ^= primitive_poly;
+        }
+
+        for (int i = size - 1; i < (size - 1) * 2; i++) {
+            exp_table[i] = exp_table[i - (size - 1)];
+        }
+        log_table[0] = -1;
+        initialized_m = m;
     }
-
-    // Optimization: avoid modulo during product
-    for (int i=size-1; i<(size-1)*2; i++){
-        exp_table[i] = exp_table[i - (size-1)];
-    }
-
-    log_table[0] = -1;                  // log(0) doesn't exist
-
 }
 
 int GaloisField::add(int a, int b) const{

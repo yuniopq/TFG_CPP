@@ -14,7 +14,7 @@ private:
     int n;                          // Code length (2^m - 1)
     int k;                          // Information bits
     GaloisField gf;                 // Galois Field
-    std::unique_ptr<Polynomial> generator;  // Generator polynomial
+    Polynomial generator;  // Generator polynomial
 
     void computeGeneratorPolynomial();
 

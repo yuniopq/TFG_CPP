@@ -11,11 +11,13 @@ private:
     int size;               // 2^m
     int primitive_poly;     // Primitive Polynomial
 
-    std::vector<int> exp_table;  // Antilog table
-    std::vector<int> log_table;  // Log table
+    static std::vector<int> exp_table;  // Antilog table
+    static std::vector<int> log_table;  // Log table
+    static int initialized_m; // Para saber si ya las calculamos
     
 public:
-    GaloisField(int m, int primitive_poly);
+    GaloisField()=default;
+    GaloisField(int m=0, int primitive_poly=0);
     int add(int a, int b) const;
     int multiply(int a, int b) const;
     int divide(int a, int b) const;
