@@ -7,8 +7,6 @@
 #include "GaloisField.h"
 #include "Polynomial.h"
 
-using namespace std;
-
 class BCH_Codec {
 private:
     int m;                          // Degree of GF(2^m)
@@ -16,7 +14,7 @@ private:
     int n;                          // Code length (2^m - 1)
     int k;                          // Information bits
     GaloisField gf;                 // Galois Field
-    unique_ptr<Polynomial> generator;  // Generator polynomial
+    std::unique_ptr<Polynomial> generator;  // Generator polynomial
 
     void computeGeneratorPolynomial();
 
@@ -24,12 +22,12 @@ public:
     BCH_Codec(int m, int t, int primitive_poly);
     
     // Encode: add parity bits to message
-    vector<int> encode(const vector<int>& message);
+    std::vector<int> encode(const std::vector<int>& message);
 
-    vector<int> encodeLFSR(const vector<int> &message);
+    std::vector<int> encodeLFSR(const std::vector<int> &message);
 
     // Decode: detect and correct errors
-    vector<int> decode(const vector<int>& received);
+    std::vector<int> decode(const std::vector<int>& received);
     
     // Get parameters
     int getN() const { return n; }

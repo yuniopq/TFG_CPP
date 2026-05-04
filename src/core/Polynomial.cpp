@@ -1,6 +1,6 @@
 #include "Polynomial.h"
 
-Polynomial::Polynomial(const GaloisField &galoisField, const vector<int> &coefficients): coef(coefficients), gf(&galoisField) {
+Polynomial::Polynomial(const GaloisField &galoisField, const std::vector<int> &coefficients): coef(coefficients), gf(&galoisField) {
     trim();
 }
 
@@ -38,6 +38,7 @@ int Polynomial::setCoef(int degree, int value)
     }
 
     coef[index] = value;
+    trim();
     return 0;
 }
 
@@ -50,7 +51,7 @@ Polynomial Polynomial::add(const Polynomial &p2) const
         return Polynomial(*gf, coef);
     }
 
-    vector<int> result_coef(max(coef.size(), p2.coef.size()), 0);
+    std::vector<int> result_coef(std::max(coef.size(), p2.coef.size()), 0);
     for (size_t i = 0; i < result_coef.size(); i++) {
         int c1 = (i < coef.size()) ? coef[i] : 0;
         int c2 = (i < p2.coef.size()) ? p2.coef[i] : 0;
@@ -66,7 +67,7 @@ Polynomial Polynomial::multiply(const Polynomial &p2) const{
         return Polynomial(*gf, {});
     }
 
-    vector<int> result_coef(coef.size() + p2.coef.size() - 1, 0);
+    std::vector<int> result_coef(coef.size() + p2.coef.size() - 1, 0);
     
     for(size_t i = 0; i < coef.size(); i++){
         for(size_t j=0; j<p2.coef.size(); j++){
@@ -100,23 +101,24 @@ int Polynomial::evaluate(int x) {
     return res;
 }
 
-void Polynomial::print(){
+void Polynomial::print() {
     if (coef.empty()) {
         std::cout << 0 << std::endl;
         return;
     }
 
+    bool first_term = true;
     for (int i = getDegree(); i >= 0; i--) {
-        int coef = getCoef(i);
-        if (coef != 0) {
+        int c = getCoef(i);
+        if (c != 0) {
+            if (!first_term) std::cout << " + "; // Imprime el + ANTES del siguiente término
+            
             if (i == 0) {
-                std::cout << coef;
+                std::cout << c;
             } else {
-                std::cout << coef << "x^" << i;
+                std::cout << c << "x^" << i;
             }
-            if (i > 0) {
-                std::cout << " + ";
-            }
+            first_term = false;
         }
     }
     std::cout << std::endl;

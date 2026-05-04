@@ -2,100 +2,97 @@
 #include "../include/GaloisField.h"
 #include "../include/BCH_Codec.h" 
 #include "../include/Polynomial.h"
-int main() {
-    // GF(256) with primitive polynomial x^8 + x^4 + x^3 + x^2 + 1 (0x11D)
-    GaloisField gf(8, 0x11D);
+using namespace std;
+// Función para imprimir vectores sin saturar la pantalla si son muy grandes
+void printVector(const string& label, const vector<int>& vec) {
+    cout << label << " (" << vec.size() << " bits): [ ";
+    int limit = min((int)vec.size(), 30); // Solo imprime los primeros 30 bits para no llenar la consola
+    for (int i = 0; i < limit; i++) {
+        cout << vec[i] << " ";
+    }
+    if (vec.size() > 30) cout << "...";
+    cout << "]" << endl;
+}
 
-    std::cout << "--- Galois Field GF(256) Test ---" << std::endl;
-    
-    // Test 1: Addition (XOR)
-    std::cout << "7 + 3 = " << gf.add(7, 3) << " (Expected: 4)" << std::endl;
+// Diccionario de polinomios primitivos estándar para cada 'm'
+int getDefaultPrimitivePoly(int m) {
+    switch (m) {
+        case 3: return 11;  // x^3 + x + 1
+        case 4: return 19;  // x^4 + x + 1
+        case 5: return 37;  // x^5 + x^2 + 1
+        case 6: return 67;  // x^6 + x + 1
+        case 7: return 137; // x^7 + x^3 + 1
+        case 8: return 285; // x^8 + x^4 + x^3 + x^2 + 1
+        case 9: return 529; // x^9 + x^4 + 1
+        case 10: return 1033; // x^10 + x^3 + 1
+        default: 
+            throw invalid_argument("No tengo un polinomio predefinido para esa 'm'.");
+    }
+}
 
-    // Test 2: Multiplication
-    // In GF(256), 2 * 2 = 4, but what about large numbers?
-    int a = 128;
-    int b = 2;
-    std::cout << "128 * 2 = " << gf.multiply(a, b) << " (Expected: 29 because of reduction)" << std::endl;
-
-    // Test 3: Inverse
-    int inv = gf.inverse(10);
-    std::cout << "Inv(10) = " << inv << " -> 10 * " << inv << " = " << gf.multiply(10, inv) << std::endl;
-
-    std::cout << "--- Testing Polynomials ---" << std::endl;
-
-    // Creamos p1(x) = x + 2  (alfa^1 * x + alfa^0)
-    // Coeficientes en orden ascendente: [2, 1]
-    Polynomial p1(gf, {2, 1}); 
-
-    // Creamos p2(x) = x + 3
-    Polynomial p2(gf, {3, 1});
-
-    // Test 1: Suma (x + 2) + (x + 3) = 0x + 1 = 1
-    Polynomial p_sum = p1 + p2;
-    std::cout << "p1(x) + p2(x) degree: " << p_sum.getDegree() << " (Expected: 0)" << std::endl;
-    std::cout << "Result coeff 0: " << p_sum.getCoef(0) << " (Expected: 1)" << std::endl;
-
-    // Test 2: Multiplicación (x + 2)(x + 3) = x^2 + (2+3)x + (2*3) 
-    // En GF(256): 2+3 = 1, 2*3 = 6 -> x^2 + x + 6
-    Polynomial p_mul = p1 * p2;
-    std::cout << "p1(x) * p2(x) degree: " << p_mul.getDegree() << " (Expected: 2)" << std::endl;
-    std::cout << "Coeffs: [" << p_mul.getCoef(0) << ", " << p_mul.getCoef(1) << ", " << p_mul.getCoef(2) << "]" << std::endl;
-    std::cout << "Expected: [6, 1, 1]" << std::endl;
-
-    // Test 3: Evaluación (Horner)
-    // Evaluar p1(x) = x + 2 en x = 5. Resultado: 5 ^ 2 = 7
-    int eval = p1.evaluate(5);
-    std::cout << "p1(5) = " << eval << " (Expected: 7)" << std::endl;
-
-    std::cout << "\n--- Testing BCH Codec: BCH(15, 7) ---" << std::endl;
-
-    // m=4 (GF(16)), t=2, polinomio primitivo x^4 + x + 1 (0x13)
-    int m = 4;
-    int t_err = 2;
-    int prim_poly = 0x13; 
-
+int main(int argc, char* argv[]) {
     try {
-        BCH_Codec bch(m, t_err, prim_poly);
+        // Valores por defecto 
+        int m = 4;
+        int t = 2;
 
-        std::cout << "Parameters: n=" << bch.getN() << ", k=" << bch.getK() 
-                << ", t=" << bch.getT() << std::endl;
+        // Si el usuario pasa argumentos por terminal (ej: ./bch_test 5 3)
+        if (argc >= 3) {
+            m = atoi(argv[1]);
+            t = atoi(argv[2]);
+        }
 
-        // Test 1: Verificar el Generador
-        // Para BCH(15, 7), el grado del generador debe ser n - k = 8
+        int primitive_poly = getDefaultPrimitivePoly(m);
+
+        cout << "========================================" << endl;
+        cout << "   INICIALIZANDO CODEC BCH(" << ((1<<m)-1) << ", k)   " << endl;
+        cout << "========================================" << endl;
+        
+        BCH_Codec bch(m, t, primitive_poly);
+        
+        int n = bch.getN();
+        int k = bch.getK();
+        int paridad_bits = n - k;
+
+        cout << "Parametros:" << endl;
+        cout << "- m: " << m << " (Polinomio primitivo: " << primitive_poly << ")" << endl;
+        cout << "- Longitud total (n): " << n << " bits" << endl;
+        cout << "- Bits de mensaje (k): " << k << " bits" << endl;
+        cout << "- Bits de paridad: " << paridad_bits << " bits" << endl;
+        cout << "- Capacidad de correccion (t): " << bch.getT() << " errores" << endl;
         bch.printGeneratorPolynomial();
-        std::cout << "Expected degree: 8" << std::endl;
+        cout << "========================================" << endl;
 
-        // Test 2: Codificación Sistemática
-        // Mensaje de k=7 bits (puedes usar 0s y 1s)
-        std::vector<int> msg = {1, 0, 1, 1, 0, 0, 1}; 
-        std::vector<int> encoded = bch.encode(msg);
+        // Generamos un mensaje dinámico exactamente del tamaño 'k'
+        vector<int> message(k);
+        for(int i = 0; i < k; i++) {
+            message[i] = rand() % 2; // Rellena con 0s y 1s aleatorios
+        }
+        
+        cout << "\n--- FASE DE CODIFICACION ---" << endl;
+        printVector("Mensaje original", message);
 
-        std::cout << "Message:  ";
-        for(int bit : msg) std::cout << bit << " ";
-        std::cout << "\nEncoded:  ";
-        for(int bit : encoded) std::cout << bit << " ";
-        std::cout << std::endl;
-
-        // Verificación de propiedad sistemática: 
-        // En tu implementación, el mensaje debería estar en la parte "alta" (los últimos k bits)
-        bool systematic_ok = true;
-        for(int i = 0; i < bch.getK(); i++) {
-            if(encoded[bch.getN() - bch.getK() + i] != msg[i]) {
-                systematic_ok = false;
+        vector<int> encoded = bch.encode(message);
+        printVector("Mensaje Transmitido", encoded);
+        
+        // Comprobación de que es sistemático
+        bool is_systematic = true;
+        for(int i = 0; i < k; i++) {
+            if(encoded[paridad_bits + i] != message[i]) {
+                is_systematic = false;
+                break;
             }
         }
-        std::cout << "Systematic Property Check: " << (systematic_ok ? "PASSED ✅" : "FAILED ❌") << std::endl;
 
-        // Test 3: Decodificación (Sin errores por ahora)
-        std::vector<int> decoded = bch.decode(encoded);
-        bool decode_ok = true;
-        for(int i = 0; i < msg.size(); i++) {
-            if(decoded[i] != msg[i]) decode_ok = false;
+        if (is_systematic) {
+            cout << "\n[OK] El codigo es sistematico (el mensaje esta intacto al final del bloque)." << endl;
+        } else {
+            cout << "\n[ERROR] El mensaje original no coincide con el final del bloque codificado." << endl;
         }
-        std::cout << "No-error Decoding Check: " << (decode_ok ? "PASSED ✅" : "FAILED ❌") << std::endl;
 
-    } catch (const std::exception& e) {
-        std::cerr << "Error en BCH: " << e.what() << std::endl;
+    } catch (const exception& e) {
+        cerr << "\n[ERROR FATAL]: " << e.what() << endl;
+        cerr << "Asegurate de que 't' no sea tan grande que haga k <= 0." << endl;
     }
 
     return 0;
