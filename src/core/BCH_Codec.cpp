@@ -84,6 +84,24 @@ std::vector<uint16_t> BCH_Codec::encodeLFSR(const std::vector<uint16_t> &message
     return parity;
 }
 
+std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received, bool &error) {
+    Polynomial r(gf, received);
+    std::vector<uint16_t> synd(2 * t + 1, 0);
+    error = false;
+    for(int i=1; i<=2*t; i++){
+        if (i%2 == 0){
+            synd[i] = gf.power(synd[i/2],2);
+        } else{
+            uint16_t root = gf.power(2, i); // a^i
+            synd[i] = r.evaluate(root);
+        }
+        if(synd[i] != 0 and !error){
+            error = true;
+        }
+    }
+    return synd;
+}
+
 std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
     // Placeholder: assume no errors and return message part
     // Full implementation would compute syndrome, find error locations, correct

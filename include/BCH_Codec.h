@@ -25,6 +25,8 @@ public:
     std::vector<uint16_t> encode(const std::vector<uint16_t>& message);
 
     std::vector<uint16_t> encodeLFSR(const std::vector<uint16_t> &message);
+    
+    std::vector<uint16_t> syndrome(const std::vector<uint16_t>& received, bool &error);
 
     // Decode: detect and correct errors
     std::vector<uint16_t> decode(const std::vector<uint16_t>& received);
