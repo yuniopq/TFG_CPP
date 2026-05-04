@@ -25,7 +25,9 @@ public:
     
     // Encode: add parity bits to message
     vector<int> encode(const vector<int>& message);
-    
+
+    vector<int> encodeLFSR(const vector<int> &message);
+
     // Decode: detect and correct errors
     vector<int> decode(const vector<int>& received);
     

@@ -1,6 +1,7 @@
 #include "../../include/BCH_Codec.h"
 #include <iostream>
 #include <stdexcept>
+#include "BCH_Codec.h"
 
 BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
     : m(m), t(t), gf(m, primitive_poly), generator(nullptr) {
@@ -57,6 +58,29 @@ vector<int> BCH_Codec::encode(const vector<int>& message) {
         }
     }
 
+    parity.insert(parity.end(), message.begin(), message.end());
+    return parity;
+}
+
+vector<int> BCH_Codec::encodeLFSR(const vector<int> &message) {
+
+    vector<int> parity(n - k, 0);
+    for (int i = message.size()-1; i>=0; i--){
+        int MSB = parity.back();
+        int b = message[i];
+        int feedback = MSB ^ b;
+        if(feedback == 1){
+            for (int j = parity.size()-1; j>0; j--){
+                parity[j] = parity[j-1] ^ generator->getCoef(j);
+            }
+            parity[0] = generator->getCoef(0);
+        }else{
+            for (int j = parity.size()-1; j>0; j--){
+                parity[j] = parity[j-1];
+            }
+            parity[0] = 0;
+        }
+    }
     parity.insert(parity.end(), message.begin(), message.end());
     return parity;
 }
