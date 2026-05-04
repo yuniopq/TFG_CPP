@@ -27,7 +27,6 @@ GaloisField::GaloisField(int m, int primitive_poly)
         for (int i = size - 1; i < (size - 1) * 2; i++) {
             exp_table[i] = exp_table[i - (size - 1)];
         }
-        log_table[0] = -1;
         initialized_m = m;
     }
 }
