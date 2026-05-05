@@ -1,99 +1,115 @@
 #include <iostream>
-#include "../include/GaloisField.h"
-#include "../include/BCH_Codec.h" 
-#include "../include/Polynomial.h"
-using namespace std;
-// Función para imprimir vectores sin saturar la pantalla si son muy grandes
-void printVector(const string& label, const vector<uint16_t>& vec) {
-    cout << label << " (" << vec.size() << " bits): [ ";
-    int limit = min((int)vec.size(), 30); // Solo imprime los primeros 30 bits para no llenar la consola
-    for (int i = 0; i < limit; i++) {
-        cout << vec[i] << " ";
-    }
-    if (vec.size() > 30) cout << "...";
-    cout << "]" << endl;
-}
+#include <vector>
+#include <algorithm>
+#include <cstdlib>
+#include <ctime>
+#include <stdexcept>
+#include <chrono>
+#include "GaloisField.h"
+#include "BCH_Codec.h"
+#include "Polynomial.h"
 
-// Diccionario de polinomios primitivos estándar para cada 'm'
+using namespace std;
+
+// Función para obtener el polinomio primitivo estándar según 'm'
 int getDefaultPrimitivePoly(int m) {
     switch (m) {
-        case 3: return 11;  // x^3 + x + 1
-        case 4: return 19;  // x^4 + x + 1
-        case 5: return 37;  // x^5 + x^2 + 1
-        case 6: return 67;  // x^6 + x + 1
-        case 7: return 137; // x^7 + x^3 + 1
-        case 8: return 285; // x^8 + x^4 + x^3 + x^2 + 1
-        case 9: return 529; // x^9 + x^4 + 1
-        case 10: return 1033; // x^10 + x^3 + 1
-        default: 
-            throw invalid_argument("No tengo un polinomio predefinido para esa 'm'.");
+        case 3:  return 0b1011;        // x^3 + x + 1
+        case 4:  return 0b10011;       // x^4 + x + 1
+        case 5:  return 0b100101;      // x^5 + x^2 + 1
+        case 6:  return 0b1000011;     // x^6 + x + 1
+        case 7:  return 0b10001001;    // x^7 + x^3 + 1
+        case 8:  return 0b100011101;   // x^8 + x^4 + x^3 + x^2 + 1
+        case 9:  return 0b1000010001;  // x^9 + x^4 + 1
+        case 10: return 0b10000001001; // x^10 + x^3 + 1
+        case 11: return 0b100000000101;// x^11 + x^2 + 1
+        case 12: return 0b1000001010011;// x^12 + x^6 + x^4 + x + 1
+        case 13: return 0b10000000011011;// x^13 + x^4 + x^3 + x + 1
+        case 14: return 0b100010000000011;// x^14 + x^10 + x^6 + x + 1
+        case 15: return 0b1000000000000011;// x^15 + x + 1
+        default: return 0;
     }
+}
+
+void printVector(const string& label, const vector<uint16_t>& vec) {
+    cout << label << " (" << vec.size() << " bits): [ ";
+    for (size_t i = 0; i < vec.size(); i++) {
+        cout << vec[i] << " ";
+        if (i == 29 && vec.size() > 30) {
+            cout << "...";
+            break;
+        }
+    }
+    cout << "]" << endl;
 }
 
 int main(int argc, char* argv[]) {
     try {
-        // Valores por defecto 
+        auto start = std::chrono::high_resolution_clock::now();
+
+        srand(time(nullptr));
+
         int m = 4;
         int t = 2;
 
-        // Si el usuario pasa argumentos por terminal (ej: ./bch_test 5 3)
         if (argc >= 3) {
-            m = atoi(argv[1]);
-            t = atoi(argv[2]);
+            m = stoi(argv[1]);
+            t = stoi(argv[2]);
         }
 
-        int primitive_poly = getDefaultPrimitivePoly(m);
+        int prim_poly = getDefaultPrimitivePoly(m);
+        if (prim_poly == 0) throw invalid_argument("Polinomio primitivo no definido para m");
 
-        cout << "========================================" << endl;
-        cout << "   INICIALIZANDO CODEC BCH(" << ((1<<m)-1) << ", k)   " << endl;
-        cout << "========================================" << endl;
-        
-        BCH_Codec bch(m, t, primitive_poly);
-        
-        int n = bch.getN();
-        int k = bch.getK();
-        int paridad_bits = n - k;
+        cout << "=== TEST BCH CODEC (" << ((1 << m) - 1) << ", k) ===" << endl;
 
-        cout << "Parametros:" << endl;
-        cout << "- m: " << m << " (Polinomio primitivo: " << primitive_poly << ")" << endl;
-        cout << "- Longitud total (n): " << n << " bits" << endl;
-        cout << "- Bits de mensaje (k): " << k << " bits" << endl;
-        cout << "- Bits de paridad: " << paridad_bits << " bits" << endl;
-        cout << "- Capacidad de correccion (t): " << bch.getT() << " errores" << endl;
-        bch.printGeneratorPolynomial();
-        cout << "========================================" << endl;
+        // El constructor requiere m, t y el polinomio primitivo
+        BCH_Codec bch(m, t, prim_poly);
 
-        // Generamos un mensaje dinámico exactamente del tamaño 'k'
+        int n = bch.getN(); // Cambiado de getCodeLength()
+        int k = bch.getK(); // Cambiado de getMessageLength()
+        cout << "n: " << n << ", k: " << k << ", t: " << bch.getT() << endl;
+
+        // 1. Generar mensaje aleatorio de k bits
         vector<uint16_t> message(k);
-        for(int i = 0; i < k; i++) {
-            message[i] = rand() % 2; // Rellena con 0s y 1s aleatorios
-        }
-        
-        cout << "\n--- FASE DE CODIFICACION ---" << endl;
+        for (int i = 0; i < k; i++) message[i] = rand() % 2;
         printVector("Mensaje original", message);
 
+        // 2. Codificar
         vector<uint16_t> encoded = bch.encode(message);
-        printVector("Mensaje Transmitido", encoded);
-        
-        // Comprobación de que es sistemático
-        bool is_systematic = true;
-        for(int i = 0; i < k; i++) {
-            if(encoded[paridad_bits + i] != message[i]) {
-                is_systematic = false;
-                break;
-            }
-        }
+        printVector("Bloque codificado", encoded);
 
-        if (is_systematic) {
-            cout << "\n[OK] El codigo es sistematico (el mensaje esta intacto al final del bloque)." << endl;
-        } else {
-            cout << "\n[ERROR] El mensaje original no coincide con el final del bloque codificado." << endl;
+        // 3. Introducir errores
+        vector<uint16_t> noisy = encoded;
+        cout << "Inyectando " << t << " errores aleatorios..." << endl;
+        for (int i = 0; i < t; i++) {
+            int pos = rand() % n;
+            noisy[pos] ^= 1; // Flip de bit
+            cout << "Error en pos: " << pos << endl;
         }
+        printVector("Bloque con ruido  ", noisy);
+
+        // 4. Decodificar
+        vector<uint16_t> decoded = bch.decode(noisy);
+        printVector("Mensaje recuperado", decoded);
+
+        // 5. Comparar
+        bool correcto = (message == decoded);
+        if (correcto) {
+            cout << "\n✅ EXITO: El mensaje se recuperó íntegramente." << endl;
+        } else {
+            cout << "\n❌ ERROR: El mensaje decodificado no coincide." << endl;
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+
+        std::chrono::duration<double> elapsed = end - start;
+
+        std::cout << "\n⏱ Tiempo de ejecución: "
+                << elapsed.count()
+                << " segundos\n";
 
     } catch (const exception& e) {
-        cerr << "\n[ERROR FATAL]: " << e.what() << endl;
-        cerr << "Asegurate de que 't' no sea tan grande que haga k <= 0." << endl;
+        cerr << "\nExcepcion: " << e.what() << endl;
+        return 1;
     }
-
     return 0;
 }

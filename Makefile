@@ -1,7 +1,7 @@
 # --- Variables ---
 CXX      = g++
 CXXFLAGS = -Wall -Wextra -std=c++17 -Iinclude -MMD -MP
-TARGET   = bch_test
+TARGET = $(BUILD_DIR)/bch_test
 
 # --- Directorios ---
 SRC_DIR   = src
@@ -53,6 +53,18 @@ run-m6: all
 	@echo "🚀 Ejecutando test para m=6, t=4 (BCH 63, 39)...\n"
 	@./$(TARGET) 6 4
 
+run-m7: all
+	@echo "🚀 Ejecutando test para m=7, t=5 (BCH 127, ...)...\n"
+	@./$(TARGET) 7 5
+
+run-m8: all
+	@echo "🚀 Ejecutando test para m=8, t=6 (BCH 255, ...)...\n"
+	@./$(TARGET) 8 6
+
+run-m15: all
+	@echo "🚀 Ejecutando test GRANDE para m=15, t=7 (BCH 32767, ...)...\n"
+	@./$(TARGET) 15 7
+
 # 3. Test de error (Para comprobar que el control de excepciones funciona)
 run-error: all
 	@echo "🚀 Ejecutando test de error intencionado (m=4, t=4)...\n"
@@ -75,6 +87,9 @@ help:
 	@echo "make run-m4    - Ejecuta BCH(15, 7)"
 	@echo "make run-m5    - Ejecuta BCH(31, 16)"
 	@echo "make run-m6    - Ejecuta BCH(63, 39)"
+	@echo "make run-m7    - Ejecuta BCH(127, ...)"
+	@echo "make run-m8    - Ejecuta BCH(255, ...)"
+	@echo "make run-m15   - Ejecuta BCH grande (32767, ...)"
 	@echo "make run-error - Fuerza un error (k <= 0)"
 	@echo "make run-custom m=X t=Y - Ejecuta con tus propios valores"
 	@echo "========================================="

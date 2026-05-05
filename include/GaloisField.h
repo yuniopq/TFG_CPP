@@ -18,6 +18,9 @@ private:
 public:
     GaloisField()=default;
     GaloisField(int m=0, int primitive_poly=0);
+    uint16_t getExp(int i) const {
+        return exp_table[i];
+    };
     uint16_t add(uint16_t a, uint16_t b) const;
     uint16_t multiply(uint16_t a, uint16_t b) const;
     uint16_t divide(uint16_t a, uint16_t b) const;

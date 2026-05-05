@@ -1,4 +1,4 @@
-#include "../../include/GaloisField.h"
+#include "GaloisField.h"
 #include <stdexcept>
 
 // Inicialización de estáticos (fuera de la clase)

@@ -44,20 +44,27 @@ void BCH_Codec::computeGeneratorPolynomial() {
 
 std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
 
-    std::vector<uint16_t> parity(generator.getDegree(), 0);
-    for (int i = message.size()-1; i>=0; i--){
-        uint16_t MSB = parity.back();
-        for(std::size_t j = parity.size()-1; j>0; j--){
-            parity[j] = parity[j-1];
-        }
-        parity[0] = message[i];
-        if(MSB == 1){
-            for( std::size_t j=0; j<parity.size(); j++)
-                parity[j]^=generator.getCoef(j);
+    int g = generator.getDegree();
+
+    // 1. Crear mensaje extendido: m(x)*x^r
+    std::vector<uint16_t> buffer = message;
+    buffer.insert(buffer.begin(), g, 0); // añadir ceros al inicio
+
+    // 2. División polinómica
+    for (int i = buffer.size() - 1; i >= g; i--) {
+        if (buffer[i] == 1) { // si hay que dividir
+            for (int j = 0; j <= g; j++) {
+                buffer[i - j] ^= generator.getCoef(g - j);
+            }
         }
     }
 
+    // 3. El resto son los primeros g bits
+    std::vector<uint16_t> parity(buffer.begin(), buffer.begin() + g);
+
+    // 4. Código final: parity + mensaje
     parity.insert(parity.end(), message.begin(), message.end());
+
     return parity;
 }
 
@@ -169,7 +176,7 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
             for (int i = 0; i < n; i++) {
                 uint16_t sum = 0;
                 for (int j = 0; j <= L; j++){
-                    sum = gf.add(sum, reg[i]);
+                    sum = gf.add(sum, reg[j]);
                 }
 
                 if (sum==0){
