@@ -102,15 +102,62 @@ std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received,
     return synd;
 }
 
+Polynomial BCH_Codec::belerkampMassey(const std::vector<uint16_t> synd)
+{
+    Polynomial B(gf, {1}), C(gf, {1});      
+    int L=0, m=1, db=1;
+    for(int i=1; i<=2*t; i++){
+
+        int d=synd[i];
+
+        for(int j=1; j<=L; j++){
+            int term = gf.multiply(C.getCoef(j), synd[i-j]);
+            d = gf.add(d, term);
+        }
+
+        if (d==0){
+            m++;
+        } else{
+            //C(x) = C(x) + d/db * B(x) * x^m
+            Polynomial tmpC = C;
+            // Creamos un polinomio que representa d * db_inv * x^m * B(x)
+            Polynomial correctionPoly(gf, std::vector<uint16_t>(m+1, 0));
+            correctionPoly.setCoef( m , gf.multiply( d, gf.inverse(db)) );
+            C = C + ( correctionPoly * B);
+
+            if (2*L <= i-1){
+                db=d;
+                L = i - L;
+                B = C;
+                m=1;
+            } else{
+                m++;
+            }
+        }
+    }
+    return C;
+}
+
 std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
     // Placeholder: assume no errors and return message part
     // Full implementation would compute syndrome, find error locations, correct
-    
+    bool haveErrors;
+    std::vector<uint16_t> synd = syndrome(received, haveErrors);
+
+    if (!haveErrors) {
+        std::cout << "No errors detected." << std::endl;
+        std::vector<uint16_t> decoded(received.begin(), received.begin() + k);
+        return decoded;
+    } else {
+        std::cout << "Errors detected, but correction not implemented." << std::endl;
+    }
     size_t msg_size = std::min(static_cast<size_t>(k), received.size());
     std::vector<uint16_t> decoded(received.begin(), received.begin() + msg_size);
     
     return decoded;
 }
+
+
 
 void BCH_Codec::printGeneratorPolynomial() {
     if (generator.getDegree() >= 0) {
