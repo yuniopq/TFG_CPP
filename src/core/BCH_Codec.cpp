@@ -128,7 +128,7 @@ Polynomial BCH_Codec::belerkampMassey(const std::vector<uint16_t> synd)
             if (2*L <= i-1){
                 db=d;
                 L = i - L;
-                B = C;
+                B = tmpC;
                 m=1;
             } else{
                 m++;
@@ -152,8 +152,7 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
         std::cout << "Errors detected, but correction not implemented." << std::endl;
     }
     size_t msg_size = std::min(static_cast<size_t>(k), received.size());
-    std::vector<uint16_t> decoded(received.begin(), received.begin() + msg_size);
-    
+    std::vector<uint16_t> decoded(received.end() - k, received.end());    
     return decoded;
 }
 
