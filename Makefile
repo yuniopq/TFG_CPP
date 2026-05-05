@@ -62,8 +62,8 @@ run-m8: all
 	@./$(TARGET) 8 6
 
 run-m15: all
-	@echo "🚀 Ejecutando test GRANDE para m=15, t=7 (BCH 32767, ...)...\n"
-	@./$(TARGET) 15 7
+	@echo "🚀 Ejecutando test GRANDE para m=15, t=100 (BCH 32767, ...)...\n"
+	@./$(TARGET) 15 100
 
 # 3. Test de error (Para comprobar que el control de excepciones funciona)
 run-error: all

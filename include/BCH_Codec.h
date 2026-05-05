@@ -25,7 +25,9 @@ public:
     std::vector<uint16_t> encode(const std::vector<uint16_t>& message);
 
     std::vector<uint16_t> encodeLFSR(const std::vector<uint16_t> &message);
-    
+
+    std::vector<uint16_t> encodeHorner(const std::vector<uint16_t> &message);
+
     std::vector<uint16_t> syndrome(const std::vector<uint16_t>& received, bool &error);
 
     Polynomial belerkampMassey(const std::vector<uint16_t> syndrome);

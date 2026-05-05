@@ -5,28 +5,29 @@
 #include <ctime>
 #include <stdexcept>
 #include <chrono>
+#include <iomanip> // Para formatear decimales
 #include "GaloisField.h"
 #include "BCH_Codec.h"
 #include "Polynomial.h"
 
 using namespace std;
+using namespace std::chrono;
 
-// Función para obtener el polinomio primitivo estándar según 'm'
 int getDefaultPrimitivePoly(int m) {
     switch (m) {
-        case 3:  return 0b1011;        // x^3 + x + 1
-        case 4:  return 0b10011;       // x^4 + x + 1
-        case 5:  return 0b100101;      // x^5 + x^2 + 1
-        case 6:  return 0b1000011;     // x^6 + x + 1
-        case 7:  return 0b10001001;    // x^7 + x^3 + 1
-        case 8:  return 0b100011101;   // x^8 + x^4 + x^3 + x^2 + 1
-        case 9:  return 0b1000010001;  // x^9 + x^4 + 1
-        case 10: return 0b10000001001; // x^10 + x^3 + 1
-        case 11: return 0b100000000101;// x^11 + x^2 + 1
-        case 12: return 0b1000001010011;// x^12 + x^6 + x^4 + x + 1
-        case 13: return 0b10000000011011;// x^13 + x^4 + x^3 + x + 1
-        case 14: return 0b100010000000011;// x^14 + x^10 + x^6 + x + 1
-        case 15: return 0b1000000000000011;// x^15 + x + 1
+        case 3:  return 0b1011;
+        case 4:  return 0b10011;
+        case 5:  return 0b100101;
+        case 6:  return 0b1000011;
+        case 7:  return 0b10001001;
+        case 8:  return 0b100011101;
+        case 9:  return 0b1000010001;
+        case 10: return 0b10000001001;
+        case 11: return 0b100000000101;
+        case 12: return 0b1000001010011;
+        case 13: return 0b10000000011011;
+        case 14: return 0b100010000000011;
+        case 15: return 0b1000000000000011;
         default: return 0;
     }
 }
@@ -45,8 +46,6 @@ void printVector(const string& label, const vector<uint16_t>& vec) {
 
 int main(int argc, char* argv[]) {
     try {
-        auto start = std::chrono::high_resolution_clock::now();
-
         srand(time(nullptr));
 
         int m = 4;
@@ -62,50 +61,70 @@ int main(int argc, char* argv[]) {
 
         cout << "=== TEST BCH CODEC (" << ((1 << m) - 1) << ", k) ===" << endl;
 
-        // El constructor requiere m, t y el polinomio primitivo
+        // --- MEDICIÓN: INICIALIZACIÓN ---
+        auto t_init_start = high_resolution_clock::now();
+        
         BCH_Codec bch(m, t, prim_poly);
+        
+        auto t_init_end = high_resolution_clock::now();
+        // --------------------------------
 
-        int n = bch.getN(); // Cambiado de getCodeLength()
-        int k = bch.getK(); // Cambiado de getMessageLength()
+        int n = bch.getN();
+        int k = bch.getK();
         cout << "n: " << n << ", k: " << k << ", t: " << bch.getT() << endl;
 
-        // 1. Generar mensaje aleatorio de k bits
+        // 1. Generar mensaje aleatorio
         vector<uint16_t> message(k);
         for (int i = 0; i < k; i++) message[i] = rand() % 2;
         printVector("Mensaje original", message);
 
-        // 2. Codificar
+        // --- MEDICIÓN: CODIFICACIÓN ---
+        auto t_enc_start = high_resolution_clock::now();
+        
         vector<uint16_t> encoded = bch.encode(message);
-        printVector("Bloque codificado", encoded);
+        
+        auto t_enc_end = high_resolution_clock::now();
+        // ------------------------------
 
         // 3. Introducir errores
         vector<uint16_t> noisy = encoded;
-        cout << "Inyectando " << t << " errores aleatorios..." << endl;
+        cout << "\nInyectando " << t << " errores aleatorios..." << endl;
         for (int i = 0; i < t; i++) {
             int pos = rand() % n;
-            noisy[pos] ^= 1; // Flip de bit
-            cout << "Error en pos: " << pos << endl;
+            noisy[pos] ^= 1;
         }
-        printVector("Bloque con ruido  ", noisy);
 
-        // 4. Decodificar
+        // --- MEDICIÓN: DECODIFICACIÓN ---
+        auto t_dec_start = high_resolution_clock::now();
+        
         vector<uint16_t> decoded = bch.decode(noisy);
-        printVector("Mensaje recuperado", decoded);
+        
+        auto t_dec_end = high_resolution_clock::now();
+        // --------------------------------
 
-        // 5. Comparar
+        // 5. Comparar y Resultados
         bool correcto = (message == decoded);
+        
+        // Calcular duraciones en microsegundos para mayor precisión en procesos rápidos
+        auto d_init = duration_cast<microseconds>(t_init_end - t_init_start).count();
+        auto d_enc  = duration_cast<microseconds>(t_enc_end - t_enc_start).count();
+        auto d_dec  = duration_cast<microseconds>(t_dec_end - t_dec_start).count();
+
+        cout << "\n" << string(40, '-') << endl;
+        cout << "REPORTE DE TIEMPOS" << endl;
+        cout << string(40, '-') << endl;
+        cout << fixed << setprecision(3);
+        cout << "1. Inicialización (GF/BCH): " << d_init << " µs (" << d_init / 1000.0 << " ms)" << endl;
+        cout << "2. Codificación:           " << d_enc  << " µs (" << d_enc  / 1000.0 << " ms)" << endl;
+        cout << "3. Decodificación:         " << d_dec  << " µs (" << d_dec  / 1000.0 << " ms)" << endl;
+        cout << "TOTAL PROCESO:             " << (d_init + d_enc + d_dec) / 1000.0 << " ms" << endl;
+        cout << string(40, '-') << endl;
+
         if (correcto) {
-            cout << "\n✅ EXITO: El mensaje se recuperó íntegramente." << endl;
+            cout << "✅ EXITO: El mensaje se recuperó íntegramente." << endl;
         } else {
-            cout << "\n❌ ERROR: El mensaje decodificado no coincide." << endl;
+            cout << "❌ ERROR: El mensaje decodificado no coincide." << endl;
         }
-        auto end = std::chrono::high_resolution_clock::now();
-
-        std::chrono::duration<double> elapsed = end - start;
-
-        std::cout << "\n⏱ Tiempo de ejecución: "
-                << elapsed.count()
-                << " segundos\n";
 
     } catch (const exception& e) {
         cerr << "\nExcepcion: " << e.what() << endl;

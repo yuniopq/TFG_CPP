@@ -90,7 +90,28 @@ std::vector<uint16_t> BCH_Codec::encodeLFSR(const std::vector<uint16_t> &message
     parity.insert(parity.end(), message.begin(), message.end());
     return parity;
 }
+std::vector<uint16_t> BCH_Codec::encodeHorner(const std::vector<uint16_t> &message) {
+    int g_deg = generator.getDegree();
+    std::vector<uint16_t> remainder(g_deg, 0);
 
+    // Procesamos el mensaje de mayor a menor grado (Horner)
+    for (int i = message.size() - 1; i >= 0; i--) {
+        // El bit que "sale" por la izquierda al multiplicar por x
+        uint16_t feedback = message[i] ^ remainder[g_deg - 1];
+
+        // Desplazamiento y XOR (La esencia de Horner en campos finitos)
+        for (int j = g_deg - 1; j > 0; j--) {
+            remainder[j] = remainder[j - 1] ^ (feedback ? generator.getCoef(j) : 0);
+        }
+        remainder[0] = (feedback ? generator.getCoef(0) : 0);
+    }
+    
+    // Al final, 'remainder' es el resto de la división
+    // Combinar con mensaje para forma sistemática...
+    remainder.insert(remainder.end(), message.begin(), message.end());
+
+    return remainder;
+}
 std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received, bool &error) {
     Polynomial r(gf, received);
     std::vector<uint16_t> synd(2 * t + 1, 0);
