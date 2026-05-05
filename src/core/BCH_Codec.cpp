@@ -139,24 +139,57 @@ Polynomial BCH_Codec::belerkampMassey(const std::vector<uint16_t> synd)
 }
 
 std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
-    // Placeholder: assume no errors and return message part
-    // Full implementation would compute syndrome, find error locations, correct
+    std::vector<uint16_t> corrected = received;
+
     bool haveErrors;
-    std::vector<uint16_t> synd = syndrome(received, haveErrors);
+    std::vector<uint16_t> synd = syndrome(corrected, haveErrors);
 
-    if (!haveErrors) {
-        std::cout << "No errors detected." << std::endl;
-        std::vector<uint16_t> decoded(received.begin(), received.begin() + k);
-        return decoded;
-    } else {
-        std::cout << "Errors detected, but correction not implemented." << std::endl;
+    if (haveErrors){
+        Polynomial errorLocator = belerkampMassey(synd);
+        int L = errorLocator.getDegree();
+        if (L==0 or L>t){
+            std::cerr << "[!] Errores incorregibles: L=" << L << " y t=" << t << std::endl;
+        }else{
+
+            // Chien's search
+            
+            std::vector<uint16_t> reg(L+1, 0);
+
+            for (int i=0; i<=L; i++){
+                reg[i] = errorLocator.getCoef(i);
+            }
+
+            std::vector<uint16_t> factors(L + 1);
+            for (int i = 0; i <= L; i++){
+                factors[i] = gf.power(2, n-i); // a^(-j)
+            }
+            
+
+            int rootsFound = 0;
+            for (int i = 0; i < n; i++) {
+                uint16_t sum = 0;
+                for (int j = 0; j <= L; j++){
+                    sum = gf.add(sum, reg[i]);
+                }
+
+                if (sum==0){
+                    corrected[i] ^= 1; // Flip the bit at position i
+                    rootsFound++;
+                }
+
+                for (int j = 0; j <= L; j++){
+                    reg[j] = gf.multiply(reg[j], factors[j]);
+                }
+                
+            }
+            if (rootsFound != L){
+                std::cerr << "[!] Advertencia: Se esperaban " << L << " errores, pero se encontraron " << rootsFound << std::endl;
+            }
+        }
     }
-    size_t msg_size = std::min(static_cast<size_t>(k), received.size());
-    std::vector<uint16_t> decoded(received.end() - k, received.end());    
-    return decoded;
+         
+    return std::vector<uint16_t>(corrected.end() - k, corrected.end());
 }
-
-
 
 void BCH_Codec::printGeneratorPolynomial() {
     if (generator.getDegree() >= 0) {
