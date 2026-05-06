@@ -1,6 +1,7 @@
 # --- Variables ---
 CXX      = g++
-CXXFLAGS = -Wall -Wextra -std=c++17 -Iinclude -MMD -MP
+# Añadimos -O3, -march=native y -DNDEBUG para máximo rendimiento
+CXXFLAGS = -Wall -Wextra -std=c++17 -Iinclude -MMD -MP -O3 -march=native -DNDEBUG
 TARGET = $(BUILD_DIR)/bch_test
 
 # --- Directorios ---
@@ -18,7 +19,7 @@ DEPS := $(OBJS:.o=.d)
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	@echo "🔗 Enlazando el ejecutable..."
+	@echo "🔗 Enlazando el ejecutable optimizado..."
 	@$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp

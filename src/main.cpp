@@ -38,8 +38,8 @@ int main(int argc, char* argv[]) {
         srand(time(nullptr));
 
         // 1. Configuración de parámetros (vía argumentos o por defecto)
-        int m = 15;
-        int t = 100;
+        int m = 4;
+        int t = 2;
         int num_iter = 100;      // Iteraciones por defecto
         double ber_canal = 0.001; // Probabilidad de error de bit (Canal BSC)
 
@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
 
             // Barra de progreso simple
             if ((iter + 1) % (num_iter / 10 + 1) == 0) {
-                cout << "Progreso: " << fixed << setprecision(0) << (double)(iter + 1) / num_iter * 100 << "%" << endl;
+                cout << "Progreso: " << fixed << setprecision(0) << (double)(iter) / num_iter * 100 << "%" << endl;
             }
         }
 
