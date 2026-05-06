@@ -219,6 +219,71 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
     return std::vector<uint16_t>(corrected.end() - k, corrected.end());
 }
 
+bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16_t>& message_out) {
+    std::vector<uint16_t> corrected = received;
+    bool errorsDetected = false;
+
+    // 1. Calcular los síndromes para ver si hay errores en el canal
+    std::vector<uint16_t> synd = syndrome(corrected, errorsDetected);
+
+    // Si no hay errores, extraemos el mensaje y reportamos éxito rotundo
+    if (!errorsDetected) {
+        message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
+        return true; // Éxito: Bloque limpio
+    }
+
+    // 2. Si hay errores, aplicamos el algoritmo de Berlekamp-Massey
+    Polynomial errorLocator = berlekampMassey(synd);
+    int L = errorLocator.getDegree();
+
+    // 3. Comprobación matemática de errores incorregibles
+    if (L == 0 || L > t) {
+        // Fallo: Demasiados errores. Extraemos el mensaje tal cual (con fallos)
+        message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
+        return false; // FER = 1
+    }
+
+    // 4. Búsqueda de Chien para encontrar la posición de los errores
+    std::vector<uint16_t> reg(L + 1, 0);
+    for (int i = 0; i <= L; i++) {
+        reg[i] = errorLocator.getCoef(i);
+    }
+
+    std::vector<uint16_t> factors(L + 1);
+    for (int i = 0; i <= L; i++) {
+        factors[i] = gf.power(2, n - i); // a^(-j)
+    }
+
+    int rootsFound = 0;
+    for (int i = 0; i < n; i++) {
+        uint16_t sum = 0;
+        for (int j = 0; j <= L; j++) {
+            sum = gf.add(sum, reg[j]);
+        }
+
+        if (sum == 0) {
+            corrected[i] ^= 1; // Voltea el bit erróneo
+            rootsFound++;
+        }
+
+        // Actualizar registros para la siguiente iteración
+        for (int j = 0; j <= L; j++) {
+            reg[j] = gf.multiply(reg[j], factors[j]);
+        }
+    }
+
+    // 5. Comprobación de integridad de la búsqueda de Chien
+    if (rootsFound != L) {
+        // Fallo: El polinomio decía que había L errores, pero encontramos menos/más.
+        message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
+        return false; 
+    }
+
+    // 6. Decodificación exitosa (el BCH logró arreglar el bloque)
+    message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
+    return true; 
+}
+
 void BCH_Codec::printGeneratorPolynomial() {
     if (generator.getDegree() >= 0) {
         std::cout << "Generator polynomial (degree " << generator.getDegree() << "): ";

@@ -1,5 +1,6 @@
 #include "GaloisField.h"
 #include <stdexcept>
+#include <cassert>
 
 // Inicialización de estáticos (fuera de la clase)
 std::vector<uint16_t> GaloisField::log_table;
@@ -36,26 +37,31 @@ uint16_t GaloisField::add(uint16_t a, uint16_t b) const{
 }
 
 uint16_t GaloisField::multiply(uint16_t a, uint16_t b) const{
-    if ( a >= size || b >= size) {
-        throw std::out_of_range("Field element out of range");
-    }
+    // if ( a >= size || b >= size) {
+    //     throw std::out_of_range("Field element out of range");
+    // }
+    assert(a < size && b < size && "Field element out of range");
     if (a==0||b==0) return 0;
     return exp_table[log_table[a] + log_table[b]];
 }
 
 uint16_t GaloisField::divide(uint16_t a, uint16_t b) const{
-    if (a >= size || b >= size) {
-        throw std::out_of_range("Field element out of range");
-    }
-    if (b==0)   throw std::runtime_error("Division by zero");
+    // if (a >= size || b >= size) {
+    //     throw std::out_of_range("Field element out of range");
+    // }
+    // if (b==0)   throw std::runtime_error("Division by zero");
+    assert(a < size && b < size && "Field element out of range");
+    assert(b != 0 && "Division by zero");
     if (a==0)   return 0;
     return exp_table[log_table[a] - log_table[b] + (size-1)];
 }
 
 uint16_t GaloisField::power(uint16_t a, int e) const{
-    if (a >= size) {
-        throw std::out_of_range("Field element out of range");
-    }
+    // if (a >= size) {
+    //     throw std::out_of_range("Field element out of range");
+    // }
+    assert(a < size && "Field element out of range");
+    assert(e >= 0 && "Negative exponent not supported");
     if (a == 0) return 0;
     if (e == 0) return 1;
     if (e < 0) {
@@ -66,9 +72,11 @@ uint16_t GaloisField::power(uint16_t a, int e) const{
 }
 
 uint16_t GaloisField::inverse(uint16_t a) const {
-    if (a >= size) {
-        throw std::out_of_range("Field element out of range");
-    }
-    if (a == 0) throw std::runtime_error("Cannot invert zero");
+    // if (a >= size) {
+    //     throw std::out_of_range("Field element out of range");
+    // }
+    // if (a == 0) throw std::runtime_error("Cannot invert zero");
+    assert(a < size && "Field element out of range");
+    assert(a != 0 && "Cannot invert zero");
     return exp_table[(size - 1) - log_table[a]];
 }

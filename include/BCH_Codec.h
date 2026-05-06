@@ -33,7 +33,7 @@ public:
     Polynomial berlekampMassey(const std::vector<uint16_t> syndrome);
     // Decode: detect and correct errors
     std::vector<uint16_t> decode(const std::vector<uint16_t>& received);
-    
+    bool decode( const std::vector<uint16_t> &received, std::vector<uint16_t> &msg_out);
     // Get parameters
     int getN() const { return n; }
     int getK() const { return k; }
