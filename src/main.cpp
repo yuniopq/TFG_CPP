@@ -1,11 +1,11 @@
 #include <iostream>
 #include <vector>
-#include <algorithm>
-#include <cstdlib>
-#include <ctime>
-#include <stdexcept>
 #include <chrono>
-#include <iomanip> // Para formatear decimales
+#include <iomanip>
+#include <fstream>
+#include <string>
+#include <sys/stat.h> // Para crear directorios en Linux/Unix
+
 #include "GaloisField.h"
 #include "BCH_Codec.h"
 #include "Polynomial.h"
@@ -13,6 +13,7 @@
 using namespace std;
 using namespace std::chrono;
 
+// Función para obtener el polinomio primitivo estándar
 int getDefaultPrimitivePoly(int m) {
     switch (m) {
         case 3:  return 0b1011;
@@ -32,102 +33,110 @@ int getDefaultPrimitivePoly(int m) {
     }
 }
 
-void printVector(const string& label, const vector<uint16_t>& vec) {
-    cout << label << " (" << vec.size() << " bits): [ ";
-    for (size_t i = 0; i < vec.size(); i++) {
-        cout << vec[i] << " ";
-        if (i == 29 && vec.size() > 30) {
-            cout << "...";
-            break;
-        }
-    }
-    cout << "]" << endl;
-}
-
 int main(int argc, char* argv[]) {
     try {
         srand(time(nullptr));
 
-        int m = 4;
-        int t = 2;
+        // 1. Configuración de parámetros (vía argumentos o por defecto)
+        int m = 15;
+        int t = 100;
+        int num_iter = 100;      // Iteraciones por defecto
+        double ber_canal = 0.001; // Probabilidad de error de bit (Canal BSC)
 
         if (argc >= 3) {
             m = stoi(argv[1]);
             t = stoi(argv[2]);
+            if (argc >= 4) num_iter = stoi(argv[3]);
+            if (argc >= 5) ber_canal = stod(argv[4]);
         }
 
         int prim_poly = getDefaultPrimitivePoly(m);
-        if (prim_poly == 0) throw invalid_argument("Polinomio primitivo no definido para m");
+        if (prim_poly == 0) throw invalid_argument("m no soportado.");
 
-        cout << "=== TEST BCH CODEC (" << ((1 << m) - 1) << ", k) ===" << endl;
-
-        // --- MEDICIÓN: INICIALIZACIÓN ---
-        auto t_init_start = high_resolution_clock::now();
-        
+        // 2. Inicialización del Codec (Medición única)
+        auto start_i = high_resolution_clock::now();
         BCH_Codec bch(m, t, prim_poly);
+        auto end_i = high_resolution_clock::now();
         
-        auto t_init_end = high_resolution_clock::now();
-        // --------------------------------
-
         int n = bch.getN();
         int k = bch.getK();
-        cout << "n: " << n << ", k: " << k << ", t: " << bch.getT() << endl;
+        auto dur_init = duration_cast<microseconds>(end_i - start_i).count();
 
-        // 1. Generar mensaje aleatorio
-        vector<uint16_t> message(k);
-        for (int i = 0; i < k; i++) message[i] = rand() % 2;
-        printVector("Mensaje original", message);
+        cout << "\n=== SIMULADOR BCH: ANALISIS DE RENDIMIENTO ===" << endl;
+        cout << "Configuracion: (" << n << ", " << k << ") t=" << t << endl;
+        cout << "Canal BSC (p=" << ber_canal << ") | Iteraciones: " << num_iter << endl;
 
-        // --- MEDICIÓN: CODIFICACIÓN ---
-        auto t_enc_start = high_resolution_clock::now();
-        
-        vector<uint16_t> encoded = bch.encode(message);
-        
-        auto t_enc_end = high_resolution_clock::now();
-        // ------------------------------
+        long long total_enc = 0, total_dec = 0;
+        int bloques_erroneos = 0;
 
-        // 3. Introducir errores
-        vector<uint16_t> noisy = encoded;
-        cout << "\nInyectando " << t << " errores aleatorios..." << endl;
-        for (int i = 0; i < t; i++) {
-            int pos = rand() % n;
-            noisy[pos] ^= 1;
+        // 3. Bucle de Simulación
+        for (int iter = 0; iter < num_iter; iter++) {
+            // A. Generar mensaje aleatorio
+            vector<uint16_t> message(k);
+            for (int i = 0; i < k; i++) message[i] = rand() % 2;
+
+            // B. Codificación
+            auto start_e = high_resolution_clock::now();
+            vector<uint16_t> encoded = bch.encode(message);
+            auto end_e = high_resolution_clock::now();
+            total_enc += duration_cast<microseconds>(end_e - start_e).count();
+
+            // C. Canal con Ruido (Inyección probabilística)
+            vector<uint16_t> noisy = encoded;
+            for (int i = 0; i < n; i++) {
+                if (((double)rand() / RAND_MAX) < ber_canal) {
+                    noisy[i] ^= 1;
+                }
+            }
+
+            // D. Decodificación
+            auto start_d = high_resolution_clock::now();
+            vector<uint16_t> decoded = bch.decode(noisy);
+            auto end_d = high_resolution_clock::now();
+            total_dec += duration_cast<microseconds>(end_d - start_d).count();
+
+            // E. Verificación de éxito
+            if (message != decoded) {
+                bloques_erroneos++;
+            }
+
+            // Barra de progreso simple
+            if ((iter + 1) % (num_iter / 10 + 1) == 0) {
+                cout << "Progreso: " << fixed << setprecision(0) << (double)(iter + 1) / num_iter * 100 << "%" << endl;
+            }
         }
 
-        // --- MEDICIÓN: DECODIFICACIÓN ---
-        auto t_dec_start = high_resolution_clock::now();
-        
-        vector<uint16_t> decoded = bch.decode(noisy);
-        
-        auto t_dec_end = high_resolution_clock::now();
-        // --------------------------------
+        // 4. Cálculo de métricas
+        double avg_enc = (double)total_enc / num_iter;
+        double avg_dec = (double)total_dec / num_iter;
+        double fer = (double)bloques_erroneos / num_iter;
 
-        // 5. Comparar y Resultados
-        bool correcto = (message == decoded);
+        // 5. Mostrar resultados por pantalla
+        cout << "\n----------------------------------------" << endl;
+        cout << "PROMEDIOS (us): Enc: " << avg_enc << " | Dec: " << avg_dec << endl;
+        cout << "FIABILIDAD: FER: " << (fer * 100) << "% (" << bloques_erroneos << " fallos)" << endl;
+        cout << "----------------------------------------" << endl;
+
+        // 6. Exportación a CSV para el plotter.py
+        // Creamos la carpeta 'results' si no existe
+        mkdir("results", 0777); 
         
-        // Calcular duraciones en microsegundos para mayor precisión en procesos rápidos
-        auto d_init = duration_cast<microseconds>(t_init_end - t_init_start).count();
-        auto d_enc  = duration_cast<microseconds>(t_enc_end - t_enc_start).count();
-        auto d_dec  = duration_cast<microseconds>(t_dec_end - t_dec_start).count();
+        string csv_path = "results/data_m" + to_string(m) + ".csv";
+        bool existe = ifstream(csv_path).good();
+        ofstream outfile(csv_path, ios::app);
 
-        cout << "\n" << string(40, '-') << endl;
-        cout << "REPORTE DE TIEMPOS" << endl;
-        cout << string(40, '-') << endl;
-        cout << fixed << setprecision(3);
-        cout << "1. Inicialización (GF/BCH): " << d_init << " µs (" << d_init / 1000.0 << " ms)" << endl;
-        cout << "2. Codificación:           " << d_enc  << " µs (" << d_enc  / 1000.0 << " ms)" << endl;
-        cout << "3. Decodificación:         " << d_dec  << " µs (" << d_dec  / 1000.0 << " ms)" << endl;
-        cout << "TOTAL PROCESO:             " << (d_init + d_enc + d_dec) / 1000.0 << " ms" << endl;
-        cout << string(40, '-') << endl;
-
-        if (correcto) {
-            cout << "✅ EXITO: El mensaje se recuperó íntegramente." << endl;
-        } else {
-            cout << "❌ ERROR: El mensaje decodificado no coincide." << endl;
+        if (!existe) {
+            outfile << "m,t,n,k,prob_error,avg_enc_us,avg_dec_us,fer\n";
         }
+
+        outfile << m << "," << t << "," << n << "," << k << ","
+                << ber_canal << "," << avg_enc << "," << avg_dec << "," << fer << "\n";
+        
+        outfile.close();
+        cout << "Datos guardados en: " << csv_path << endl;
 
     } catch (const exception& e) {
-        cerr << "\nExcepcion: " << e.what() << endl;
+        cerr << "Error critico: " << e.what() << endl;
         return 1;
     }
     return 0;
