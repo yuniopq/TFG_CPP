@@ -5,7 +5,15 @@
 BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
     : m(m), t(t), gf(m, primitive_poly), generator(gf, {}) {
     
+    if (m < 1 || m > 15) {
+        throw std::invalid_argument("Invalid BCH parameters: m must be between 1 and 15");
+    }
+
     n = (1 << m) - 1;  // 2^m - 1
+
+    if (t <= 0 || 2LL * t >= n) {
+        throw std::invalid_argument("Invalid BCH parameters: t must satisfy 1 <= 2t < n");
+    }
 
     computeGeneratorPolynomial();
 
@@ -43,6 +51,9 @@ void BCH_Codec::computeGeneratorPolynomial() {
 }
 
 std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
+    if (message.size() != static_cast<size_t>(k)) {
+        throw std::invalid_argument("Message length must be exactly k");
+    }
 
     int g = generator.getDegree();
 
@@ -167,6 +178,10 @@ Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t> synd)
 }
 
 std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
+    if (received.size() != static_cast<size_t>(n)) {
+        throw std::invalid_argument("Received word length must be exactly n");
+    }
+
     std::vector<uint16_t> corrected = received;
 
     bool haveErrors;
@@ -220,6 +235,10 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
 }
 
 bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16_t>& message_out) {
+    if (received.size() != static_cast<size_t>(n)) {
+        throw std::invalid_argument("Received word length must be exactly n");
+    }
+
     std::vector<uint16_t> corrected = received;
     bool errorsDetected = false;
 

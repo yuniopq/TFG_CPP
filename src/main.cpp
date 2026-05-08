@@ -50,6 +50,23 @@ int main(int argc, char* argv[]) {
             if (argc >= 5) ber_canal = stod(argv[4]);
         }
 
+        if (m < 1 || m > 15) {
+            throw invalid_argument("m debe estar entre 1 y 15");
+        }
+
+        int n = (1 << m) - 1;
+        if (t <= 0 || 2LL * t >= n) {
+            throw invalid_argument("t debe cumplir 1 <= 2t < n");
+        }
+
+        if (num_iter <= 0) {
+            throw invalid_argument("num_iter debe ser positivo");
+        }
+
+        if (ber_canal < 0.0 || ber_canal > 1.0) {
+            throw invalid_argument("ber_canal debe estar entre 0 y 1");
+        }
+
         int prim_poly = getDefaultPrimitivePoly(m);
         if (prim_poly == 0) throw invalid_argument("m no soportado.");
 
@@ -58,12 +75,12 @@ int main(int argc, char* argv[]) {
         BCH_Codec bch(m, t, prim_poly);
         auto end_i = high_resolution_clock::now();
         
-        int n = bch.getN();
         int k = bch.getK();
         auto dur_init = duration_cast<microseconds>(end_i - start_i).count();
 
         cout << "\n=== SIMULADOR BCH: ANALISIS DE RENDIMIENTO ===" << endl;
         cout << "Configuracion: (" << n << ", " << k << ") t=" << t << endl;
+        cout << "Inicializacion del codec: " << dur_init << " us" << endl;
         cout << "Canal BSC (p=" << ber_canal << ") | Iteraciones: " << num_iter << endl;
 
         long long total_enc = 0, total_dec = 0;

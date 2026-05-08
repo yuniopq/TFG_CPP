@@ -68,8 +68,8 @@ run-m15: all
 
 # 3. Test de error (Para comprobar que el control de excepciones funciona)
 run-error: all
-	@echo "🚀 Ejecutando test de error intencionado (m=4, t=4)...\n"
-	@./$(TARGET) 4 4
+	@echo "🚀 Ejecutando test de error intencionado (m=4, t=9)...\n"
+	@./$(TARGET) 4 9
 
 # 4. Ejecución personalizada (Pasando variables desde la terminal)
 # Uso: make run-custom m=5 t=2
@@ -91,7 +91,7 @@ help:
 	@echo "make run-m7    - Ejecuta BCH(127, ...)"
 	@echo "make run-m8    - Ejecuta BCH(255, ...)"
 	@echo "make run-m15   - Ejecuta BCH grande (32767, ...)"
-	@echo "make run-error - Fuerza un error (k <= 0)"
+	@echo "make run-error - Fuerza un error (t demasiado grande)"
 	@echo "make run-custom m=X t=Y - Ejecuta con tus propios valores"
 	@echo "========================================="
 

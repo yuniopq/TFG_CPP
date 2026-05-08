@@ -8,7 +8,13 @@ std::vector<uint16_t> GaloisField::exp_table;
 int GaloisField::initialized_m = -1;
 
 GaloisField::GaloisField(int m, int primitive_poly) 
-    : m(m), primitive_poly(primitive_poly) {
+    : m(m), size(0), primitive_poly(primitive_poly) {
+    if (m < 1 || m > 15) {
+        throw std::invalid_argument("m must be between 1 and 15");
+    }
+    if (primitive_poly <= 0) {
+        throw std::invalid_argument("primitive polynomial must be positive");
+    }
     
     size = 1 << m;
 

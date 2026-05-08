@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <stdexcept>
 class GaloisField{
 
 private:
