@@ -35,7 +35,5 @@ __pycache__/
 venv/
 
 # --- Resultados de Simulación ---
-# A veces es mejor no subir miles de CSVs pesados a GitHub
-# Descomenta las siguientes líneas si quieres ignorar los resultados
-# results/csv/*.csv
-# results/plots/*.png
+results/csv/*.csv
+results/plots/*.png
