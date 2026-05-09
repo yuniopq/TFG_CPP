@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdexcept>
 #include "BCH_Codec.h"
+#include "PackedBit.h"
 
 BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
     : m(m), t(t), gf(m, primitive_poly), generator(gf, {}) {
@@ -50,7 +51,11 @@ void BCH_Codec::computeGeneratorPolynomial() {
     }
 }
 
-std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
+// ============================================================================
+// VERSIÓN ANTIGUA (vector<uint16_t>, sin bitpacking) 
+// ============================================================================
+/*
+std::vector<uint16_t> BCH_Codec::encode_OLD(const std::vector<uint16_t>& message) {
     if (message.size() != static_cast<size_t>(k)) {
         throw std::invalid_argument("Message length must be exactly k");
     }
@@ -71,6 +76,49 @@ std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
     }
 
     // 3. El resto son los primeros g bits
+    std::vector<uint16_t> parity(buffer.begin(), buffer.begin() + g);
+
+    // 4. Código final: parity + mensaje
+    parity.insert(parity.end(), message.begin(), message.end());
+
+    return parity;
+}
+*/
+// ============================================================================
+// VERSIÓN NUEVA (PackedBits, optimizada)
+// ============================================================================
+std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
+    if (message.size() != static_cast<size_t>(k)) {
+        throw std::invalid_argument("Message length must be exactly k");
+    }
+
+    int g = generator.getDegree();
+
+    // 1. Crear mensaje extendido: m(x) * x^g con bits empaquetados
+    std::vector<uint16_t> buffer(g, 0);
+    buffer.insert(buffer.end(), message.begin(), message.end());
+    PackedBit binaryBuffer(buffer);
+
+    // Polinomio generador binario (coeficientes por grado, de 0 a g)
+    // O eso es lo que se pensaba, pero debido a una condicion de parada en el algoritmo de desplazamiento
+    // El polinomio generador será igual de grande que el mensaje a enviar(con los bits de paridad)
+    std::vector<uint16_t> gen_bits(g+1, 0);
+    for (int deg = 0; deg <= g; ++deg) {
+        gen_bits[deg] = generator.getCoef(deg);
+    }
+    PackedBit gen_packed(gen_bits);
+
+    // 2. División polinómica: si msb es 1, XOR de g(x) alineado al grado actual
+    for (int i = buffer.size() - 1; i >= g; --i) {
+        if (binaryBuffer.get(i)) {
+            size_t shift = (i - g);
+            // binaryBuffer ^= gen_packed << shift;
+            binaryBuffer.xorShifted(gen_packed, shift);
+        }
+    }
+
+    // 3. El resto son los primeros g bits
+    buffer = binaryBuffer.toVector();
     std::vector<uint16_t> parity(buffer.begin(), buffer.begin() + g);
 
     // 4. Código final: parity + mensaje
