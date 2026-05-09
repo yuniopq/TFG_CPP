@@ -137,8 +137,9 @@ int main(int argc, char* argv[]) {
         // 6. Exportación a CSV para el plotter.py
         // Creamos la carpeta 'results' si no existe
         mkdir("results", 0777); 
+        mkdir("results/csv", 0777);
         
-        string csv_path = "results/data_m" + to_string(m) + ".csv";
+        string csv_path = "results/csv/data_m" + to_string(m) + ".csv";
         bool existe = ifstream(csv_path).good();
         ofstream outfile(csv_path, ios::app);
 

@@ -5,7 +5,7 @@ import glob
 
 def generate_plots():
     # Buscamos todos los archivos CSV que haya en la carpeta results
-    path = 'results'
+    path = 'results/csv/'
     all_files = glob.glob(os.path.join(path, "data_m*.csv"))
     
     if not all_files:
@@ -37,8 +37,8 @@ def generate_plots():
             plt.annotate(f"n={2**txt-1}", (df_esc['m'].iloc[i], df_esc['avg_dec_us'].iloc[i]/1000), 
                          textcoords="offset points", xytext=(0,10), ha='center', fontsize=8)
 
-        plt.savefig("results/grafica_escalabilidad_m.png")
-        print("📊 Gráfica de escalabilidad guardada en results/grafica_escalabilidad_m.png")
+        plt.savefig("results/plot/grafica_escalabilidad_m.png")
+        print("📊 Gráfica de escalabilidad guardada en results/plot/grafica_escalabilidad_m.png")
 
     # --- GRÁFICA DE FIABILIDAD (BER vs FER) para el m más alto ---
     m_max = df['m'].max()
@@ -51,7 +51,7 @@ def generate_plots():
     plt.xlabel("BER del Canal (Probabilidad de error de bit)")
     plt.ylabel("FER (Tasa de error de bloque)")
     plt.grid(True, which="both", ls="-", alpha=0.2)
-    plt.savefig(f"results/grafica_ber_m{m_max}.png")
+    plt.savefig(f"results/plot/grafica_ber_m{m_max}.png")
     
     plt.show()
 

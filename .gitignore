@@ -35,5 +35,5 @@ __pycache__/
 venv/
 
 # --- Resultados de Simulación ---
-results/csv/*.csv
-results/plots/*.png
+results/*.csv
+results/*.png
