@@ -4,16 +4,33 @@
 #include <iomanip>
 #include <fstream>
 #include <string>
-#include <sys/stat.h> // Para crear directorios en Linux/Unix
+#include <sys/stat.h>
 
 #include "GaloisField.h"
 #include "BCH_Codec.h"
+#include "Channel.h"
 #include "Polynomial.h"
 
 using namespace std;
 using namespace std::chrono;
 
-// Función para obtener el polinomio primitivo estándar
+struct SimulationConfig {
+    int m = 4;
+    int t = 2;
+    int num_iter = 100;
+    double ber_canal = 0.001;
+};
+
+struct SimulationResults {
+    double avg_enc = 0;
+    double avg_dec = 0;
+    double fer = 0;
+
+    long long total_enc = 0;
+    long long total_dec = 0;
+    int bloques_erroneos = 0;
+};
+
 int getDefaultPrimitivePoly(int m) {
     switch (m) {
         case 3:  return 0b1011;
@@ -33,129 +50,203 @@ int getDefaultPrimitivePoly(int m) {
     }
 }
 
+SimulationConfig parseArguments(int argc, char* argv[]) {
+    SimulationConfig cfg;
+
+    if (argc >= 3) {
+        cfg.m = stoi(argv[1]);
+        cfg.t = stoi(argv[2]);
+
+        if (argc >= 4) cfg.num_iter = stoi(argv[3]);
+        if (argc >= 5) cfg.ber_canal = stod(argv[4]);
+    }
+
+    return cfg;
+}
+
+void validateParameters(const SimulationConfig& cfg) {
+    int n = (1 << cfg.m) - 1;
+
+    if (cfg.m < 1 || cfg.m > 15)
+        throw invalid_argument("m debe estar entre 1 y 15");
+
+    if (cfg.t <= 0 || 2LL * cfg.t >= n)
+        throw invalid_argument("t debe cumplir 1 <= 2t < n");
+
+    if (cfg.num_iter <= 0)
+        throw invalid_argument("num_iter debe ser positivo");
+
+    if (cfg.ber_canal < 0.0 || cfg.ber_canal > 1.0)
+        throw invalid_argument("ber_canal debe estar entre 0 y 1");
+}
+
+vector<uint16_t> generateRandomMessage(int k) {
+    vector<uint16_t> msg(k);
+
+    for (int i = 0; i < k; i++)
+        msg[i] = rand() % 2;
+
+    return msg;
+}
+
+void printProgress(int iter, int total) {
+    if ((iter + 1) % (total / 10 + 1) == 0) {
+        cout << "Progreso: "
+             << fixed << setprecision(0)
+             << (double)(iter + 1) / total * 100
+             << "%" << endl;
+    }
+}
+
+SimulationResults runSimulation( BCH_Codec& bch, Channel& channel, const SimulationConfig& cfg ) {
+    SimulationResults results;
+
+    int k = bch.getK();
+
+    for (int iter = 0; iter < cfg.num_iter; iter++) {
+
+        vector<uint16_t> message = generateRandomMessage(k);
+
+        // Codificación
+        auto start_e = high_resolution_clock::now();
+        vector<uint16_t> encoded = bch.encode(message);
+        auto end_e = high_resolution_clock::now();
+
+        results.total_enc += duration_cast<microseconds>(end_e - start_e).count();
+
+        // Canal
+        vector<uint16_t> noisy = channel.applyBSC(encoded, cfg.ber_canal);
+
+        // Decodificación
+        auto start_d = high_resolution_clock::now();
+        vector<uint16_t> decoded = bch.decode(noisy);
+        auto end_d = high_resolution_clock::now();
+
+        results.total_dec +=
+            duration_cast<microseconds>(end_d - start_d).count();
+
+        // Verificación
+        if (message != decoded)
+            results.bloques_erroneos++;
+
+        printProgress(iter, cfg.num_iter);
+    }
+
+    results.avg_enc =
+        (double)results.total_enc / cfg.num_iter;
+
+    results.avg_dec =
+        (double)results.total_dec / cfg.num_iter;
+
+    results.fer =
+        (double)results.bloques_erroneos / cfg.num_iter;
+
+    return results;
+}
+
+void printResults( const SimulationResults& results ) {
+    cout << "\n----------------------------------------" << endl;
+
+    cout << "PROMEDIOS (us): "
+         << "Enc: " << results.avg_enc
+         << " | Dec: " << results.avg_dec << endl;
+
+    cout << "FIABILIDAD: FER: "
+         << (results.fer * 100)
+         << "% (" << results.bloques_erroneos
+         << " fallos)" << endl;
+
+    cout << "----------------------------------------" << endl;
+}
+
+void exportCSV( const SimulationConfig& cfg, const SimulationResults& results, int n, int k ) {
+    mkdir("results", 0777);
+    mkdir("results/csv", 0777);
+
+    string csv_path =
+        "results/csv/data_m" + to_string(cfg.m) + ".csv";
+
+    bool existe = ifstream(csv_path).good();
+
+    ofstream outfile(csv_path, ios::app);
+
+    if (!existe) {
+        outfile << "m,t,n,k,prob_error,avg_enc_us,avg_dec_us,fer\n";
+    }
+
+    outfile << cfg.m << ","
+            << cfg.t << ","
+            << n << ","
+            << k << ","
+            << cfg.ber_canal << ","
+            << results.avg_enc << ","
+            << results.avg_dec << ","
+            << results.fer << "\n";
+
+    outfile.close();
+
+    cout << "Datos guardados en: "
+         << csv_path << endl;
+}
+
 int main(int argc, char* argv[]) {
     try {
+
         srand(time(nullptr));
 
-        // 1. Configuración de parámetros (vía argumentos o por defecto)
-        int m = 4;
-        int t = 2;
-        int num_iter = 100;      // Iteraciones por defecto
-        double ber_canal = 0.001; // Probabilidad de error de bit (Canal BSC)
+        SimulationConfig cfg = parseArguments(argc, argv);
 
-        if (argc >= 3) {
-            m = stoi(argv[1]);
-            t = stoi(argv[2]);
-            if (argc >= 4) num_iter = stoi(argv[3]);
-            if (argc >= 5) ber_canal = stod(argv[4]);
-        }
+        validateParameters(cfg);
 
-        if (m < 1 || m > 15) {
-            throw invalid_argument("m debe estar entre 1 y 15");
-        }
+        int prim_poly =
+            getDefaultPrimitivePoly(cfg.m);
 
-        int n = (1 << m) - 1;
-        if (t <= 0 || 2LL * t >= n) {
-            throw invalid_argument("t debe cumplir 1 <= 2t < n");
-        }
+        if (prim_poly == 0)
+            throw invalid_argument("m no soportado");
 
-        if (num_iter <= 0) {
-            throw invalid_argument("num_iter debe ser positivo");
-        }
+        int n = (1 << cfg.m) - 1;
 
-        if (ber_canal < 0.0 || ber_canal > 1.0) {
-            throw invalid_argument("ber_canal debe estar entre 0 y 1");
-        }
-
-        int prim_poly = getDefaultPrimitivePoly(m);
-        if (prim_poly == 0) throw invalid_argument("m no soportado.");
-
-        // 2. Inicialización del Codec (Medición única)
         auto start_i = high_resolution_clock::now();
-        BCH_Codec bch(m, t, prim_poly);
+
+        BCH_Codec bch(cfg.m, cfg.t, prim_poly);
+        Channel channel;
+
         auto end_i = high_resolution_clock::now();
-        
+
         int k = bch.getK();
-        auto dur_init = duration_cast<microseconds>(end_i - start_i).count();
 
-        cout << "\n=== SIMULADOR BCH: ANALISIS DE RENDIMIENTO ===" << endl;
-        cout << "Configuracion: (" << n << ", " << k << ") t=" << t << endl;
-        cout << "Inicializacion del codec: " << dur_init << " us" << endl;
-        cout << "Canal BSC (p=" << ber_canal << ") | Iteraciones: " << num_iter << endl;
+        auto dur_init =
+            duration_cast<microseconds>( end_i - start_i ).count(); 
 
-        long long total_enc = 0, total_dec = 0;
-        int bloques_erroneos = 0;
+        cout << "\n=== SIMULADOR BCH ===" << endl;
 
-        // 3. Bucle de Simulación
-        for (int iter = 0; iter < num_iter; iter++) {
-            // A. Generar mensaje aleatorio
-            vector<uint16_t> message(k);
-            for (int i = 0; i < k; i++) message[i] = rand() % 2;
+        cout << "Configuracion: ("
+             << n << ", "
+             << k << ") t="
+             << cfg.t << endl;
 
-            // B. Codificación
-            auto start_e = high_resolution_clock::now();
-            vector<uint16_t> encoded = bch.encode(message);
-            auto end_e = high_resolution_clock::now();
-            total_enc += duration_cast<microseconds>(end_e - start_e).count();
+        cout << "Inicializacion: "
+             << dur_init
+             << " us" << endl;
 
-            // C. Canal con Ruido (Inyección probabilística)
-            vector<uint16_t> noisy = encoded;
-            for (int i = 0; i < n; i++) {
-                if (((double)rand() / RAND_MAX) < ber_canal) {
-                    noisy[i] ^= 1;
-                }
-            }
+        cout << "Canal BSC p="
+             << cfg.ber_canal
+             << " | Iteraciones="
+             << cfg.num_iter
+             << endl;
 
-            // D. Decodificación
-            auto start_d = high_resolution_clock::now();
-            vector<uint16_t> decoded = bch.decode(noisy);
-            auto end_d = high_resolution_clock::now();
-            total_dec += duration_cast<microseconds>(end_d - start_d).count();
+        SimulationResults results = runSimulation(bch, channel, cfg);
 
-            // E. Verificación de éxito
-            if (message != decoded) {
-                bloques_erroneos++;
-            }
+        printResults(results);
 
-            // Barra de progreso simple
-            if ((iter + 1) % (num_iter / 10 + 1) == 0) {
-                cout << "Progreso: " << fixed << setprecision(0) << (double)(iter) / num_iter * 100 << "%" << endl;
-            }
-        }
+        exportCSV(cfg, results, n, k);
 
-        // 4. Cálculo de métricas
-        double avg_enc = (double)total_enc / num_iter;
-        double avg_dec = (double)total_dec / num_iter;
-        double fer = (double)bloques_erroneos / num_iter;
-
-        // 5. Mostrar resultados por pantalla
-        cout << "\n----------------------------------------" << endl;
-        cout << "PROMEDIOS (us): Enc: " << avg_enc << " | Dec: " << avg_dec << endl;
-        cout << "FIABILIDAD: FER: " << (fer * 100) << "% (" << bloques_erroneos << " fallos)" << endl;
-        cout << "----------------------------------------" << endl;
-
-        // 6. Exportación a CSV para el plotter.py
-        // Creamos la carpeta 'results' si no existe
-        mkdir("results", 0777); 
-        mkdir("results/csv", 0777);
-        
-        string csv_path = "results/csv/data_m" + to_string(m) + ".csv";
-        bool existe = ifstream(csv_path).good();
-        ofstream outfile(csv_path, ios::app);
-
-        if (!existe) {
-            outfile << "m,t,n,k,prob_error,avg_enc_us,avg_dec_us,fer\n";
-        }
-
-        outfile << m << "," << t << "," << n << "," << k << ","
-                << ber_canal << "," << avg_enc << "," << avg_dec << "," << fer << "\n";
-        
-        outfile.close();
-        cout << "Datos guardados en: " << csv_path << endl;
-
-    } catch (const exception& e) {
+    }
+    catch (const exception& e) {
         cerr << "Error critico: " << e.what() << endl;
+
         return 1;
     }
+
     return 0;
 }
