@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <fstream>
 #include <string>
+#include <cmath>
 #include <sys/stat.h>
 
 #include "GaloisField.h"
@@ -14,23 +15,27 @@
 using namespace std;
 using namespace std::chrono;
 
+// --- Estructuras Actualizadas ---
 struct SimulationConfig {
-    int m = 4;
-    int t = 2;
-    int num_iter = 100;
-    double ber_canal = 0.001;
+    int m = 7;
+    int t = 10;
+    double ebno_min = 0.0;
+    double ebno_max = 12.0;
+    double step = 1.0;
+    int min_frame_errors = 100; 
+    long max_frames = 1000000;  
 };
 
-struct SimulationResults {
-    double avg_enc = 0;
-    double avg_dec = 0;
-    double fer = 0;
-
-    long long total_enc = 0;
-    long long total_dec = 0;
-    int bloques_erroneos = 0;
+struct PointResults {
+    double ebno_db;
+    double ber;
+    double fer;
+    long frames_simulated;
+    double avg_enc_us; // <--- Nuevo campo
+    double avg_dec_us;
 };
 
+// --- Funciones auxiliares (se mantienen igual) ---
 int getDefaultPrimitivePoly(int m) {
     switch (m) {
         case 3:  return 0b1011;
@@ -52,201 +57,136 @@ int getDefaultPrimitivePoly(int m) {
 
 SimulationConfig parseArguments(int argc, char* argv[]) {
     SimulationConfig cfg;
-
     if (argc >= 3) {
         cfg.m = stoi(argv[1]);
         cfg.t = stoi(argv[2]);
-
-        if (argc >= 4) cfg.num_iter = stoi(argv[3]);
-        if (argc >= 5) cfg.ber_canal = stod(argv[4]);
+        if (argc >= 4) cfg.ebno_min = stod(argv[3]);
+        if (argc >= 5) cfg.ebno_max = stod(argv[4]);
+        if (argc >= 6) cfg.step = stod(argv[5]);
     }
-
     return cfg;
 }
 
 void validateParameters(const SimulationConfig& cfg) {
     int n = (1 << cfg.m) - 1;
-
-    if (cfg.m < 1 || cfg.m > 15)
-        throw invalid_argument("m debe estar entre 1 y 15");
-
-    if (cfg.t <= 0 || 2LL * cfg.t >= n)
-        throw invalid_argument("t debe cumplir 1 <= 2t < n");
-
-    if (cfg.num_iter <= 0)
-        throw invalid_argument("num_iter debe ser positivo");
-
-    if (cfg.ber_canal < 0.0 || cfg.ber_canal > 1.0)
-        throw invalid_argument("ber_canal debe estar entre 0 y 1");
+    if (cfg.m < 1 || cfg.m > 15) throw invalid_argument("m entre 1 y 15");
+    if (cfg.t <= 0 || 2LL * cfg.t >= n) throw invalid_argument("Capacidad t excedida");
 }
 
 vector<uint16_t> generateRandomMessage(int k) {
     vector<uint16_t> msg(k);
-
-    for (int i = 0; i < k; i++)
-        msg[i] = rand() % 2;
-
+    for (int i = 0; i < k; i++) msg[i] = rand() % 2;
     return msg;
 }
 
-void printProgress(int iter, int total) {
-    if ((iter + 1) % (total / 10 + 1) == 0) {
-        cout << "Progreso: "
-             << fixed << setprecision(0)
-             << (double)(iter + 1) / total * 100
-             << "%" << endl;
-    }
-}
-
-SimulationResults runSimulation( BCH_Codec& bch, Channel& channel, const SimulationConfig& cfg ) {
-    SimulationResults results;
-
+// --- Motor de Simulación con Doble Cronómetro ---
+PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, const SimulationConfig& cfg) {
+    PointResults res;
+    res.ebno_db = ebno_db;
+    
     int k = bch.getK();
+    int n = bch.getN();
+    double rate = (double)k / n;
+    double esno_db = ebno_db + 10.0 * log10(rate); 
+    
+    long total_bit_errors = 0;
+    long total_frame_errors = 0;
+    long frames = 0;
+    long long total_enc_time = 0; // <--- Acumulador codificación
+    long long total_dec_time = 0; // <--- Acumulador decodificación
 
-    for (int iter = 0; iter < cfg.num_iter; iter++) {
-
+    while (total_frame_errors < cfg.min_frame_errors && frames < cfg.max_frames) {
         vector<uint16_t> message = generateRandomMessage(k);
-
-        // Codificación
-        auto start_e = high_resolution_clock::now();
+        
+        // --- Cronometrar Codificación ---
+        auto start_enc = high_resolution_clock::now();
         vector<uint16_t> encoded = bch.encode(message);
-        auto end_e = high_resolution_clock::now();
-
-        results.total_enc += duration_cast<microseconds>(end_e - start_e).count();
+        auto end_enc = high_resolution_clock::now();
+        total_enc_time += duration_cast<microseconds>(end_enc - start_enc).count();
 
         // Canal
-        vector<uint16_t> noisy = channel.applyBSC(encoded, cfg.ber_canal);
+        vector<uint16_t> noisy = channel.applyAWGNHardDecision(encoded, esno_db);
 
-        // Decodificación
-        auto start_d = high_resolution_clock::now();
-        vector<uint16_t> decoded = bch.decode(noisy);
-        auto end_d = high_resolution_clock::now();
+        // --- Cronometrar Decodificación ---
+        vector<uint16_t> decoded;
+        auto start_dec = high_resolution_clock::now();
+        bool success = bch.decode(noisy, decoded);
+        auto end_dec = high_resolution_clock::now();
+        total_dec_time += duration_cast<microseconds>(end_dec - start_dec).count();
 
-        results.total_dec +=
-            duration_cast<microseconds>(end_d - start_d).count();
+        // Conteo de errores
+        int bit_errors_in_frame = 0;
+        for (int i = 0; i < k; i++) {
+            if (message[i] != decoded[i]) bit_errors_in_frame++;
+        }
 
-        // Verificación
-        if (message != decoded)
-            results.bloques_erroneos++;
-
-        printProgress(iter, cfg.num_iter);
+        if (!success || bit_errors_in_frame > 0) {
+            total_frame_errors++;
+            total_bit_errors += bit_errors_in_frame;
+        }
+        frames++;
     }
 
-    results.avg_enc =
-        (double)results.total_enc / cfg.num_iter;
-
-    results.avg_dec =
-        (double)results.total_dec / cfg.num_iter;
-
-    results.fer =
-        (double)results.bloques_erroneos / cfg.num_iter;
-
-    return results;
+    res.ber = (double)total_bit_errors / (frames * k);
+    res.fer = (double)total_frame_errors / frames;
+    res.frames_simulated = frames;
+    res.avg_enc_us = (double)total_enc_time / frames; // <--- Media codif
+    res.avg_dec_us = (double)total_dec_time / frames; // <--- Media decodif
+    return res;
 }
 
-void printResults( const SimulationResults& results ) {
-    cout << "\n----------------------------------------" << endl;
-
-    cout << "PROMEDIOS (us): "
-         << "Enc: " << results.avg_enc
-         << " | Dec: " << results.avg_dec << endl;
-
-    cout << "FIABILIDAD: FER: "
-         << (results.fer * 100)
-         << "% (" << results.bloques_erroneos
-         << " fallos)" << endl;
-
-    cout << "----------------------------------------" << endl;
-}
-
-void exportCSV( const SimulationConfig& cfg, const SimulationResults& results, int n, int k ) {
+// --- Exportación Actualizada ---
+void exportCSV(const SimulationConfig& cfg, const vector<PointResults>& all_results, int n, int k) {
     mkdir("results", 0777);
-    mkdir("results/csv", 0777);
-
-    string csv_path =
-        "results/csv/data_m" + to_string(cfg.m) + ".csv";
-
-    bool existe = ifstream(csv_path).good();
-
-    ofstream outfile(csv_path, ios::app);
-
-    if (!existe) {
-        outfile << "m,t,n,k,prob_error,avg_enc_us,avg_dec_us,fer\n";
+    string filename = "results/BCH_m" + to_string(cfg.m) + "_t" + to_string(cfg.t) + ".csv";
+    
+    ofstream outfile(filename, ios::trunc);
+    // Añadimos avg_enc_us a la cabecera
+    outfile << "m,t,n,k,ebno_db,ber,fer,frames,avg_enc_us,avg_dec_us\n";
+    for (const auto& r : all_results) {
+        outfile << cfg.m << "," << cfg.t << "," << n << "," << k << "," 
+                << r.ebno_db << "," << r.ber << "," << r.fer << "," 
+                << r.frames_simulated << "," << r.avg_enc_us << "," << r.avg_dec_us << "\n";
     }
-
-    outfile << cfg.m << ","
-            << cfg.t << ","
-            << n << ","
-            << k << ","
-            << cfg.ber_canal << ","
-            << results.avg_enc << ","
-            << results.avg_dec << ","
-            << results.fer << "\n";
-
     outfile.close();
-
-    cout << "Datos guardados en: "
-         << csv_path << endl;
+    cout << "\n[OK] Datos guardados en: " << filename << endl;
 }
 
 int main(int argc, char* argv[]) {
     try {
-
         srand(time(nullptr));
-
         SimulationConfig cfg = parseArguments(argc, argv);
-
         validateParameters(cfg);
 
-        int prim_poly =
-            getDefaultPrimitivePoly(cfg.m);
-
-        if (prim_poly == 0)
-            throw invalid_argument("m no soportado");
-
-        int n = (1 << cfg.m) - 1;
-
-        auto start_i = high_resolution_clock::now();
-
+        int prim_poly = getDefaultPrimitivePoly(cfg.m);
         BCH_Codec bch(cfg.m, cfg.t, prim_poly);
         Channel channel;
-
-        auto end_i = high_resolution_clock::now();
-
+        int n = bch.getN();
         int k = bch.getK();
 
-        auto dur_init =
-            duration_cast<microseconds>( end_i - start_i ).count(); 
+        cout << "\n=== SIMULACION BCH (" << n << "," << k << ") t=" << cfg.t << " ===" << endl;
+        cout << "------------------------------------------------------------------------" << endl;
+        cout << setw(10) << "Eb/N0(dB)" << setw(15) << "BER" << setw(15) << "FER" << setw(12) << "Frames" << endl;
+        cout << "------------------------------------------------------------------------" << endl;
 
-        cout << "\n=== SIMULADOR BCH ===" << endl;
+        vector<PointResults> all_results;
+        for (double e = cfg.ebno_min; e <= cfg.ebno_max; e += cfg.step) {
+            PointResults pr = simulatePoint(bch, channel, e, cfg);
+            all_results.push_back(pr);
+            
+            cout << setw(10) << fixed << setprecision(1) << e 
+                 << setw(15) << scientific << setprecision(3) << pr.ber 
+                 << setw(15) << pr.fer 
+                 << setw(12) << fixed << pr.frames_simulated << endl;
+            
+            if (pr.fer == 0 && e > 5.0) break;
+        }
 
-        cout << "Configuracion: ("
-             << n << ", "
-             << k << ") t="
-             << cfg.t << endl;
+        exportCSV(cfg, all_results, n, k);
 
-        cout << "Inicializacion: "
-             << dur_init
-             << " us" << endl;
-
-        cout << "Canal BSC p="
-             << cfg.ber_canal
-             << " | Iteraciones="
-             << cfg.num_iter
-             << endl;
-
-        SimulationResults results = runSimulation(bch, channel, cfg);
-
-        printResults(results);
-
-        exportCSV(cfg, results, n, k);
-
-    }
-    catch (const exception& e) {
-        cerr << "Error critico: " << e.what() << endl;
-
+    } catch (const exception& e) {
+        cerr << "[!] Error: " << e.what() << endl;
         return 1;
     }
-
     return 0;
 }
