@@ -86,11 +86,12 @@ public:
         
         // Mover bloques completos
         if (blockShift > 0){
-            for (int i = data.size() - 1; i >= 0; --i){
-                if ( i>= blockShift)
-                    data[i] = data[i - blockShift];
+            for (size_t i = data.size(); i > 0; --i){
+                size_t idx = i - 1;
+                if ( idx>= blockShift)
+                    data[idx] = data[idx - blockShift];
                 else 
-                    data[i] = 0;
+                    data[idx] = 0;
             }
         }
         
