@@ -59,7 +59,7 @@ Polynomial Polynomial::add(const Polynomial &p2) const
         result_coef[i] = gf.add(c1, c2);
     }
     Polynomial res(gf, result_coef);
-    res.trim();
+    // res.trim();
     return res;
 }
 
@@ -76,7 +76,7 @@ Polynomial Polynomial::multiply(const Polynomial &p2) const{
         }
     }
     Polynomial res(gf, result_coef);
-    res.trim();
+    // res.trim();
     return res;
 }
 

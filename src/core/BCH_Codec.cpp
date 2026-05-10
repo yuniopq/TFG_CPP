@@ -189,42 +189,89 @@ std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received,
     return synd;
 }
 
-Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t> synd)
-{
-    Polynomial B(gf, {1}), C(gf, {1});      
-    int L=0, shift_m=1, db=1;
-    for(int i=1; i<=2*t; i++){
+// Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t> synd)
+// {
+//     Polynomial B(gf, {1}), C(gf, {1});      
+//     int L=0, shift_m=1, db=1;
+//     for(int i=1; i<=2*t; i++){
 
-        int d=synd[i];
+//         int d=synd[i];
 
-        for(int j=1; j<=L; j++){
-            int term = gf.multiply(C.getCoef(j), synd[i-j]);
-            d = gf.add(d, term);
+//         for(int j=1; j<=L; j++){
+//             int term = gf.multiply(C.getCoef(j), synd[i-j]);
+//             d = gf.add(d, term);
+//         }
+
+//         if (d==0){
+//             shift_m++;
+//         } else{
+//             //C(x) = C(x) + d/db * B(x) * x^m
+//             Polynomial tmpC = C;
+//             // Creamos un polinomio que representa d * db_inv * x^m * B(x)
+//             Polynomial correctionPoly(gf, std::vector<uint16_t>(m+1, 0));
+//             correctionPoly.setCoef( shift_m , gf.multiply( d, gf.inverse(db)) );
+//             C = C + ( correctionPoly * B);
+
+//             if (2*L <= i-1){
+//                 db=d;
+//                 L = i - L;
+//                 B = tmpC;
+//                 shift_m=1;
+//             } else{
+//                 shift_m++;
+//             }
+//         }
+//     }
+//     return C;
+// }
+Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t> synd) {
+    // Usamos vectores directamente para evitar el overhead de Polynomial y trim()
+    std::vector<uint16_t> C = {1}; 
+    std::vector<uint16_t> B = {1}; 
+    int L = 0;
+    int shift_m = 1;
+    uint16_t db = 1; // Discrepancia previa
+
+    for (int i = 1; i <= 2 * t; i++) {
+        // 1. Calcular la discrepancia d
+        uint16_t d = synd[i];
+        for (int j = 1; j <= L; j++) {
+            if (j < (int)C.size()) {
+                d = gf.add(d, gf.multiply(C[j], synd[i - j]));
+            }
         }
 
-        if (d==0){
+        if (d == 0) {
             shift_m++;
-        } else{
-            //C(x) = C(x) + d/db * B(x) * x^m
-            Polynomial tmpC = C;
-            // Creamos un polinomio que representa d * db_inv * x^m * B(x)
-            Polynomial correctionPoly(gf, std::vector<uint16_t>(m+1, 0));
-            correctionPoly.setCoef( shift_m , gf.multiply( d, gf.inverse(db)) );
-            C = C + ( correctionPoly * B);
+        } else {
+            std::vector<uint16_t> oldC = C; // Copia para actualización de B
+            
+            // 2. Actualizar C(x) = C(x) + (d/db) * x^shift_m * B(x)
+            uint16_t factor = gf.multiply(d, gf.inverse(db));
+            
+            size_t neededSize = B.size() + shift_m;
+            if (C.size() < neededSize) {
+                C.resize(neededSize, 0);
+            }
 
-            if (2*L <= i-1){
-                db=d;
+            for (size_t j = 0; j < B.size(); j++) {
+                C[j + shift_m] = gf.add(C[j + shift_m], gf.multiply(factor, B[j]));
+            }
+
+            // 3. Verificación de actualización de L
+            if (2 * L <= i - 1) {
                 L = i - L;
-                B = tmpC;
-                shift_m=1;
-            } else{
+                B = oldC;
+                db = d;
+                shift_m = 1;
+            } else {
                 shift_m++;
             }
         }
     }
-    return C;
+    // Al final, el constructor de Polynomial llamará a trim() una sola vez
+    return Polynomial(gf, C);
 }
-
 std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
     if (received.size() != static_cast<size_t>(n)) {
         throw std::invalid_argument("Received word length must be exactly n");
@@ -257,7 +304,7 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
             
 
             int rootsFound = 0;
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < n and rootsFound < L; i++) {
                 uint16_t sum = 0;
                 for (int j = 0; j <= L; j++){
                     sum = gf.add(sum, reg[j]);
