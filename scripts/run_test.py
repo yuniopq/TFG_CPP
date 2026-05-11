@@ -1,17 +1,20 @@
 import subprocess
 import os
+import sys
 
 EXE_PATH = "./build/bch_test"
 # Lista de valores de m para el análisis de escalabilidad
 M_VALUES = [7, 9, 11, 13, 15]
-ITERACIONES = 20  # Pocas iteraciones porque m=15 es lento
-BER = 0.001       # Ruido constante para comparar tiempos
+TARGET_EBNO_DB = 5.0
 
 def run_scalability_test():
-    if not os.path.exists("results"):
-        os.makedirs("results")
+    os.makedirs("results/csv", exist_ok=True)
 
-    print(f"🔬 Iniciando test de escalabilidad (BER constante = {BER})")
+    if not os.path.exists(EXE_PATH):
+        print(f"❌ No se encontró el ejecutable: {EXE_PATH}. Compila primero con `make -j`.")
+        sys.exit(1)
+
+    print(f"🔬 Iniciando test de escalabilidad a Eb/N0 = {TARGET_EBNO_DB} dB")
     
     for m in M_VALUES:
         # Ajustamos t proporcionalmente para que no tarde una eternidad en m=15
@@ -20,14 +23,20 @@ def run_scalability_test():
         
         print(f"  > Probando m={m} (n={2**m-1}), t={t}...", end=" ", flush=True)
         
-        cmd = [EXE_PATH, str(m), str(t), str(ITERACIONES), str(BER)]
+        # Ejecutamos un único punto para recoger tiempos medios de codificación/decodificación.
+        cmd = [EXE_PATH, str(m), str(t), str(TARGET_EBNO_DB), str(TARGET_EBNO_DB), "1"]
         
         try:
-            # Ejecutamos y esperamos
-            subprocess.run(cmd, capture_output=True, text=True)
-            print("✅")
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            if result.stdout:
+                last_line = result.stdout.strip().splitlines()[-1]
+                print(f"✅ {last_line}")
+            else:
+                print("✅")
         except Exception as e:
             print(f"❌ Error en m={m}: {e}")
+            if isinstance(e, subprocess.CalledProcessError) and e.stderr:
+                print(e.stderr)
 
 if __name__ == "__main__":
     run_scalability_test()

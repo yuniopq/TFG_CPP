@@ -6,14 +6,31 @@
 #include <string>
 #include <cmath>
 #include <sys/stat.h>
+#include <random>
+#include <filesystem>
 
 #include "GaloisField.h"
 #include "BCH_Codec.h"
 #include "Channel.h"
 #include "Polynomial.h"
 
-using namespace std;
-using namespace std::chrono;
+using std::vector;
+using std::string;
+using std::cout;
+using std::cerr;
+using std::endl;
+using std::ofstream;
+using std::ifstream;
+using std::ios;
+using std::to_string;
+using std::setw;
+using std::fixed;
+using std::setprecision;
+using std::scientific;
+using std::invalid_argument;
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::microseconds;
 
 // --- Estructuras Actualizadas ---
 struct SimulationConfig {
@@ -24,6 +41,7 @@ struct SimulationConfig {
     double step = 1.0;
     int min_frame_errors = 100; 
     long max_frames = 1000000;  
+    bool stop_early = true;
 };
 
 struct PointResults {
@@ -37,18 +55,19 @@ struct PointResults {
 };
 
 std::vector<uint16_t> readFileToBits(const std::string& path){
-    std::ifstream file(path, std::ios::binary);
-    std::vector<uint16_t> bits;
-    char byte;
+    ifstream file(path, ios::binary);
+    vector<uint16_t> bits;
 
     if (!file)
         throw std::runtime_error("Could not open file: " + path);
 
-    while(file.get(byte))
-        for(int i = 0; i < 8; i++)
-            bits.push_back(byte & (1 << i)? 1 : 0);
-        
-    
+    int c;
+    while ((c = file.get()) != EOF) {
+        unsigned char u = static_cast<unsigned char>(c);
+        for (int i = 0; i < 8; i++) {
+            bits.push_back((u & (1u << i)) ? 1 : 0);
+        }
+    }
     return bits;
 }
 
@@ -88,11 +107,12 @@ int getDefaultPrimitivePoly(int m) {
 SimulationConfig parseArguments(int argc, char* argv[]) {
     SimulationConfig cfg;
     if (argc >= 3) {
-        cfg.m = stoi(argv[1]);
-        cfg.t = stoi(argv[2]);
-        if (argc >= 4) cfg.ebno_min = stod(argv[3]);
-        if (argc >= 5) cfg.ebno_max = stod(argv[4]);
-        if (argc >= 6) cfg.step = stod(argv[5]);
+        cfg.m = std::stoi(argv[1]);
+        cfg.t = std::stoi(argv[2]);
+        if (argc >= 4) cfg.ebno_min = std::stod(argv[3]);
+        if (argc >= 5) cfg.ebno_max = std::stod(argv[4]);
+        if (argc >= 6) cfg.step = std::stod(argv[5]);
+        if (argc >= 7) cfg.stop_early = std::stoi(argv[6]) != 0;
     }
     return cfg;
 }
@@ -103,14 +123,14 @@ void validateParameters(const SimulationConfig& cfg) {
     if (cfg.t <= 0 || 2LL * cfg.t >= n) throw invalid_argument("Capacidad t excedida");
 }
 
-vector<uint16_t> generateRandomMessage(int k) {
-    vector<uint16_t> msg(k);
-    for (int i = 0; i < k; i++) msg[i] = rand() % 2;
-    return msg;
+void generateRandomMessage(int k, std::vector<uint16_t>& msg, std::mt19937& rng) {
+    msg.resize(k);
+    std::uniform_int_distribution<int> dist(0, 1);
+    for (int i = 0; i < k; i++) msg[i] = static_cast<uint16_t>(dist(rng));
 }
 
 // --- Motor de Simulación ---
-PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, const SimulationConfig& cfg) {
+PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, const SimulationConfig& cfg, std::mt19937& rng) {
     PointResults res;
     res.ebno_db = ebno_db;
     
@@ -126,26 +146,37 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
     long long total_enc_time = 0; // <--- Acumulador codificación
     long long total_dec_time = 0; // <--- Acumulador decodificación
 
+    // Reusar buffers para disminuir allocations
+    vector<uint16_t> message;
+    vector<uint16_t> encoded;
+    vector<uint16_t> noisy;
+    vector<uint16_t> decoded;
+    message.reserve(k);
+    encoded.reserve(n);
+    decoded.reserve(k);
+
     while (total_frame_errors < cfg.min_frame_errors && frames < cfg.max_frames) {
-        vector<uint16_t> message = generateRandomMessage(k);
+        generateRandomMessage(k, message, rng);
 
         // --- CAMINO A: Con BCH ---
-        
-        // --- Cronometrar Codificación ---
         auto start_enc = high_resolution_clock::now();
-        vector<uint16_t> encoded = bch.encode(message);
+        encoded = bch.encode(message);
         auto end_enc = high_resolution_clock::now();
         total_enc_time += duration_cast<microseconds>(end_enc - start_enc).count();
 
         // Canal
-        vector<uint16_t> noisy = channel.applyAWGNHardDecision(encoded, esno_db);
+        noisy = channel.applyAWGNHardDecision(encoded, esno_db);
 
         // --- Cronometrar Decodificación ---
-        vector<uint16_t> decoded;
         auto start_dec = high_resolution_clock::now();
         bool success = bch.decode(noisy, decoded);
         auto end_dec = high_resolution_clock::now();
         total_dec_time += duration_cast<microseconds>(end_dec - start_dec).count();
+
+        if (decoded.size() != static_cast<size_t>(k)) {
+            success = false;
+            decoded.assign(k, 0);
+        }
 
         // Conteo de errores
         int bit_errors_in_frame = 0;
@@ -155,7 +186,7 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
 
         // --- CAMINO B: Sin codificar ---
         vector<uint16_t> noisy_uncoded = channel.applyAWGNHardDecision(message, ebno_db);
-        
+
         // Conteo de errores Uncoded
         for (int i = 0; i < k; i++) {
             if (message[i] != noisy_uncoded[i]) total_bit_errors_uncoded++;
@@ -168,27 +199,31 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
         frames++;
     }
 
-    res.ber = (double)total_bit_errors / (frames * k);
-    res.ber_uncoded = (double)total_bit_errors_uncoded / (frames * k);
-    res.fer = (double)total_frame_errors / frames;
-    res.frames_simulated = frames;
-    res.avg_enc_us = (double)total_enc_time / frames; // <--- Media codif
-    res.avg_dec_us = (double)total_dec_time / frames; // <--- Media decodif
+    if (frames > 0) {
+        res.ber = static_cast<double>(total_bit_errors) / (frames * k);
+        res.ber_uncoded = static_cast<double>(total_bit_errors_uncoded) / (frames * k);
+        res.fer = static_cast<double>(total_frame_errors) / frames;
+        res.frames_simulated = frames;
+        res.avg_enc_us = static_cast<double>(total_enc_time) / frames; // <--- Media codif
+        res.avg_dec_us = static_cast<double>(total_dec_time) / frames; // <--- Media decodif
+    } else {
+        res.ber = res.ber_uncoded = res.fer = 0.0;
+        res.frames_simulated = 0;
+        res.avg_enc_us = res.avg_dec_us = 0.0;
+    }
     return res;
 }
 
 // --- Exportación Actualizada ---
 void exportCSV(const SimulationConfig& cfg, const vector<PointResults>& all_results, int n, int k) {
-    mkdir("results", 0777);
-    mkdir("results/csv", 0777);
+    std::filesystem::create_directories("results/csv");
     string filename = "results/csv/BCH_m" + to_string(cfg.m) + "_t" + to_string(cfg.t) + ".csv";
     
     ofstream outfile(filename, ios::trunc);
-    // Añadimos avg_enc_us a la cabecera
-    outfile << "m,t,n,k,ebno_db,ber,fer,frames,avg_enc_us,avg_dec_us\n";
+    outfile << "m,t,n,k,ebno_db,ber,ber_uncoded,fer,frames,avg_enc_us,avg_dec_us\n";
     for (const auto& r : all_results) {
         outfile << cfg.m << "," << cfg.t << "," << n << "," << k << "," 
-                << r.ebno_db << "," << r.ber << "," << r.fer << "," 
+                << r.ebno_db << "," << r.ber << "," << r.ber_uncoded << "," << r.fer << "," 
                 << r.frames_simulated << "," << r.avg_enc_us << "," << r.avg_dec_us << "\n";
     }
     outfile.close();
@@ -197,7 +232,8 @@ void exportCSV(const SimulationConfig& cfg, const vector<PointResults>& all_resu
 
 int main(int argc, char* argv[]) {
     try {
-        srand(time(nullptr));
+        // Inicializar RNG de alta calidad
+        std::mt19937 rng(static_cast<unsigned int>(high_resolution_clock::now().time_since_epoch().count()));
         SimulationConfig cfg = parseArguments(argc, argv);
         validateParameters(cfg);
 
@@ -214,7 +250,7 @@ int main(int argc, char* argv[]) {
 
         vector<PointResults> all_results;
         for (double e = cfg.ebno_min; e <= cfg.ebno_max; e += cfg.step) {
-            PointResults pr = simulatePoint(bch, channel, e, cfg);
+            PointResults pr = simulatePoint(bch, channel, e, cfg, rng);
             all_results.push_back(pr);
             
             cout << setw(10) << fixed << setprecision(1) << e 
@@ -222,12 +258,12 @@ int main(int argc, char* argv[]) {
                  << setw(15) << pr.fer 
                  << setw(12) << fixed << pr.frames_simulated << endl;
             
-            if (pr.fer == 0 && e > 5.0) break;
+             if (cfg.stop_early && pr.fer == 0.0 && e > 5.0) break;
         }
 
         exportCSV(cfg, all_results, n, k);
 
-    } catch (const exception& e) {
+    } catch (const std::exception& e) {
         cerr << "[!] Error: " << e.what() << endl;
         return 1;
     }

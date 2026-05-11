@@ -4,21 +4,32 @@ import os
 import glob
 
 def generate_plots():
-    # Buscamos todos los archivos CSV que haya en la carpeta results
+    # Buscamos todos los archivos CSV generados por el simulador BCH
     path = 'results/csv/'
-    all_files = glob.glob(os.path.join(path, "data_m*.csv"))
+    all_files = glob.glob(os.path.join(path, "BCH_m*_t*.csv"))
     
     if not all_files:
-        print(f"⚠️ No se encontraron archivos en {path}. Ejecuta primero run_test.py")
+        print(f"⚠️ No se encontraron archivos en {path}. Ejecuta primero `run_test.py`.")
         return
 
     # Combinamos todos los archivos en un solo DataFrame
     df_list = [pd.read_csv(f) for f in all_files]
     df = pd.concat(df_list, ignore_index=True)
+
+    required_columns = {"m", "t", "n", "k", "ebno_db", "ber", "fer", "frames", "avg_enc_us", "avg_dec_us"}
+    missing = required_columns.difference(df.columns)
+    if missing:
+        print(f"❌ Faltan columnas en los CSV: {', '.join(sorted(missing))}")
+        return
+
+    if "ber_uncoded" not in df.columns:
+        df["ber_uncoded"] = float("nan")
+
+    os.makedirs("results/plot", exist_ok=True)
     
     # --- GRÁFICA DE ESCALABILIDAD: Tiempo vs m ---
-    # Filtramos para un BER constante (ej: 0.001) para comparar manzanas con manzanas
-    df_esc = df[df['prob_error'] == 0.001].sort_values('m')
+    # Usamos el punto de Eb/N0 más bajo de cada ejecución; run_test.py genera una sola fila por m.
+    df_esc = df.sort_values(['m', 't', 'ebno_db']).drop_duplicates(subset=['m', 't'], keep='first')
 
     if not df_esc.empty:
         plt.figure(figsize=(10, 6))
@@ -38,22 +49,27 @@ def generate_plots():
                          textcoords="offset points", xytext=(0,10), ha='center', fontsize=8)
 
         plt.savefig("results/plot/grafica_escalabilidad_m.png")
+        plt.close()
         print("📊 Gráfica de escalabilidad guardada en results/plot/grafica_escalabilidad_m.png")
 
-    # --- GRÁFICA DE FIABILIDAD (BER vs FER) para el m más alto ---
+    # --- GRÁFICA DE FIABILIDAD: BER/FER vs Eb/N0 para el m más alto ---
     m_max = df['m'].max()
-    df_ber = df[df['m'] == m_max].sort_values('prob_error')
+    df_ber = df[df['m'] == m_max].sort_values('ebno_db')
 
     plt.figure(figsize=(10, 6))
-    plt.plot(df_ber['prob_error'], df_ber['fer'], marker='o', color='blue')
-    plt.xscale('log')
-    plt.title(f"Curva de Error para m={m_max}, t={df_ber['t'].iloc[0]}")
-    plt.xlabel("BER del Canal (Probabilidad de error de bit)")
-    plt.ylabel("FER (Tasa de error de bloque)")
+    plt.plot(df_ber['ebno_db'], df_ber['ber'], marker='o', color='blue', label='BER')
+    plt.plot(df_ber['ebno_db'], df_ber['ber_uncoded'], marker='x', color='green', label='BER sin codificar')
+    plt.plot(df_ber['ebno_db'], df_ber['fer'], marker='s', color='orange', label='FER')
+    plt.yscale('log')
+    plt.title(f"Curva de error para m={m_max}, t={df_ber['t'].iloc[0]}")
+    plt.xlabel("Eb/N0 (dB)")
+    plt.ylabel("Tasa de error")
     plt.grid(True, which="both", ls="-", alpha=0.2)
+    plt.legend()
     plt.savefig(f"results/plot/grafica_ber_m{m_max}.png")
+    plt.close()
     
-    plt.show()
+    print(f"📊 Gráfica de error guardada en results/plot/grafica_ber_m{m_max}.png")
 
 if __name__ == "__main__":
     generate_plots()
