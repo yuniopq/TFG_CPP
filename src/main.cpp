@@ -29,13 +29,43 @@ struct SimulationConfig {
 struct PointResults {
     double ebno_db;
     double ber;
+    double ber_uncoded;
     double fer;
     long frames_simulated;
-    double avg_enc_us; // <--- Nuevo campo
+    double avg_enc_us; 
     double avg_dec_us;
 };
 
-// --- Funciones auxiliares (se mantienen igual) ---
+std::vector<uint16_t> readFileToBits(const std::string& path){
+    std::ifstream file(path, std::ios::binary);
+    std::vector<uint16_t> bits;
+    char byte;
+
+    if (!file)
+        throw std::runtime_error("Could not open file: " + path);
+
+    while(file.get(byte))
+        for(int i = 0; i < 8; i++)
+            bits.push_back(byte & (1 << i)? 1 : 0);
+        
+    
+    return bits;
+}
+
+void saveBitsToFile(const std::vector<uint16_t>& bits, const std::string& path){
+    std::ofstream file(path, std::ios::binary);
+    for (size_t i = 0; i < bits.size(); i += 8) {
+        unsigned char byte = 0;
+        for (int j = 0; j < 8 && (i + j) < bits.size(); j++) {
+            if (bits[i + j]) {
+                byte |= (1 << j);
+            }
+        }
+        file.put(byte);
+    }
+}
+
+// --- Funciones auxiliares ---
 int getDefaultPrimitivePoly(int m) {
     switch (m) {
         case 3:  return 0b1011;
@@ -79,7 +109,7 @@ vector<uint16_t> generateRandomMessage(int k) {
     return msg;
 }
 
-// --- Motor de Simulación con Doble Cronómetro ---
+// --- Motor de Simulación ---
 PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, const SimulationConfig& cfg) {
     PointResults res;
     res.ebno_db = ebno_db;
@@ -90,6 +120,7 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
     double esno_db = ebno_db + 10.0 * log10(rate); 
     
     long total_bit_errors = 0;
+    long total_bit_errors_uncoded = 0;
     long total_frame_errors = 0;
     long frames = 0;
     long long total_enc_time = 0; // <--- Acumulador codificación
@@ -97,6 +128,8 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
 
     while (total_frame_errors < cfg.min_frame_errors && frames < cfg.max_frames) {
         vector<uint16_t> message = generateRandomMessage(k);
+
+        // --- CAMINO A: Con BCH ---
         
         // --- Cronometrar Codificación ---
         auto start_enc = high_resolution_clock::now();
@@ -120,6 +153,14 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
             if (message[i] != decoded[i]) bit_errors_in_frame++;
         }
 
+        // --- CAMINO B: Sin codificar ---
+        vector<uint16_t> noisy_uncoded = channel.applyAWGNHardDecision(message, ebno_db);
+        
+        // Conteo de errores Uncoded
+        for (int i = 0; i < k; i++) {
+            if (message[i] != noisy_uncoded[i]) total_bit_errors_uncoded++;
+        }
+
         if (!success || bit_errors_in_frame > 0) {
             total_frame_errors++;
             total_bit_errors += bit_errors_in_frame;
@@ -128,6 +169,7 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
     }
 
     res.ber = (double)total_bit_errors / (frames * k);
+    res.ber_uncoded = (double)total_bit_errors_uncoded / (frames * k);
     res.fer = (double)total_frame_errors / frames;
     res.frames_simulated = frames;
     res.avg_enc_us = (double)total_enc_time / frames; // <--- Media codif
@@ -138,7 +180,8 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
 // --- Exportación Actualizada ---
 void exportCSV(const SimulationConfig& cfg, const vector<PointResults>& all_results, int n, int k) {
     mkdir("results", 0777);
-    string filename = "results/BCH_m" + to_string(cfg.m) + "_t" + to_string(cfg.t) + ".csv";
+    mkdir("results/csv", 0777);
+    string filename = "results/csv/BCH_m" + to_string(cfg.m) + "_t" + to_string(cfg.t) + ".csv";
     
     ofstream outfile(filename, ios::trunc);
     // Añadimos avg_enc_us a la cabecera
