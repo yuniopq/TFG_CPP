@@ -1,98 +1,75 @@
-# --- Variables ---
+# --- Colores para terminal ---
+CYAN  = \033[0;36m
+GREEN = \033[0;32m
+GOLD  = \033[0;33m
+RESET = \033[0m
+
+# --- Variables de Compilación ---
 CXX      = g++
-# Añadimos -O3, -march=native y -DNDEBUG para máximo rendimiento
-CXXFLAGS = -Wall -Wextra -std=c++17 -Iinclude -MMD -MP -O3 -march=native -DNDEBUG
-TARGET = $(BUILD_DIR)/bch_test
+# -O3 y -march=native son clave para el rendimiento de la lógica polinómica 
+CXXFLAGS = -Wall -Wextra -std=c++17 -Iinclude -MMD -MP -O3 -march=native -DNDEBUG -fopenmp
+TARGET   = bch_sim
 
 # --- Directorios ---
 SRC_DIR   = src
 BUILD_DIR = build
+RES_DIR   = results
 
-# --- Búsqueda automática de archivos ---
+# --- Búsqueda automática ---
 SRCS := $(shell find $(SRC_DIR) -name '*.cpp')
 OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 
-# --- Reglas Principales ---
-.PHONY: all clean run run-m4 run-m5 run-m6 run-error help
+# --- Valores por defecto para ejecución ---
+M    ?= 7
+T    ?= 10
+MIN  ?= 0
+MAX  ?= 10
+STEP ?= 1
+FILE ?= # Vacío por defecto
 
-all: $(TARGET)
+# --- Reglas Principales ---
+.PHONY: all clean help setup
+
+all: setup $(TARGET)
+
+setup:
+	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(RES_DIR)/csv
 
 $(TARGET): $(OBJS)
-	@echo "🔗 Enlazando el ejecutable optimizado..."
-	@$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS)
+	@echo "$(CYAN)🔗 Enlazando ejecutable optimizado:$(RESET) $@"
+	@$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
+	@echo "$(GREEN)✨ Compilación completada con éxito.$(RESET)"
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
-	@echo "🔨 Compilando $<..."
+	@echo "$(GOLD)🔨 Compilando:$(RESET) $<"
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
-clean:
-	@echo "🧹 Limpiando..."
-	@rm -rf $(BUILD_DIR) $(TARGET)
-	@echo "✨ Todo limpio."
+# --- Menú de Ejecución Inteligente ---
 
-# =====================================================================
-# --- MENÚ DE EJECUCIÓN ---
-# =====================================================================
-
-# 1. Ejecución estándar (Por defecto: m=4, t=2)
+# Ejecución general: usa los valores por defecto o los pasados por terminal
+# Ejemplo: make run M=4 T=2 FILE=imagen.bmp
 run: all
-	@echo "🚀 Ejecutando test por defecto (m=4, t=2)...\n"
-	@./$(TARGET)
+	@echo "$(CYAN)🚀 Iniciando Simulación BCH...$(RESET)"
+	@./$(TARGET) $(M) $(T) $(MIN) $(MAX) $(STEP) $(FILE)
 
-# 2. Ejecuciones predefinidas (Añade las que más uses)
-run-m4: all
-	@echo "🚀 Ejecutando test para m=4, t=2 (BCH 15, 7)...\n"
-	@./$(TARGET) 4 2
+# Limpieza total incluyendo resultados
+clean:
+	@echo "$(CYAN)🧹 Limpiando archivos temporales y resultados...$(RESET)"
+	@rm -rf $(BUILD_DIR) $(TARGET) $(RES_DIR)
+	@echo "$(GREEN)Done.$(RESET)"
 
-run-m5: all
-	@echo "🚀 Ejecutando test para m=5, t=3 (BCH 31, 16)...\n"
-	@./$(TARGET) 5 3
-
-run-m6: all
-	@echo "🚀 Ejecutando test para m=6, t=4 (BCH 63, 39)...\n"
-	@./$(TARGET) 6 4
-
-run-m7: all
-	@echo "🚀 Ejecutando test para m=7, t=5 (BCH 127, ...)...\n"
-	@./$(TARGET) 7 5
-
-run-m8: all
-	@echo "🚀 Ejecutando test para m=8, t=6 (BCH 255, ...)...\n"
-	@./$(TARGET) 8 6
-
-run-m15: all
-	@echo "🚀 Ejecutando test GRANDE para m=15, t=100 (BCH 32767, ...)...\n"
-	@./$(TARGET) 15 100
-
-# 3. Test de error (Para comprobar que el control de excepciones funciona)
-run-error: all
-	@echo "🚀 Ejecutando test de error intencionado (m=4, t=9)...\n"
-	@./$(TARGET) 4 9
-
-# 4. Ejecución personalizada (Pasando variables desde la terminal)
-# Uso: make run-custom m=5 t=2
-run-custom: all
-	@echo "🚀 Ejecutando test personalizado (m=$(m), t=$(t))...\n"
-	@./$(TARGET) $(m) $(t)
-
-# Menú de ayuda para no olvidarte de los comandos
 help:
-	@echo "========================================="
-	@echo "   Comandos disponibles en el Makefile   "
-	@echo "========================================="
-	@echo "make           - Compila el proyecto"
-	@echo "make clean     - Borra los archivos compilados"
-	@echo "make run       - Ejecuta el test por defecto"
-	@echo "make run-m4    - Ejecuta BCH(15, 7)"
-	@echo "make run-m5    - Ejecuta BCH(31, 16)"
-	@echo "make run-m6    - Ejecuta BCH(63, 39)"
-	@echo "make run-m7    - Ejecuta BCH(127, ...)"
-	@echo "make run-m8    - Ejecuta BCH(255, ...)"
-	@echo "make run-m15   - Ejecuta BCH grande (32767, ...)"
-	@echo "make run-error - Fuerza un error (t demasiado grande)"
-	@echo "make run-custom m=X t=Y - Ejecuta con tus propios valores"
-	@echo "========================================="
+	@echo "$(CYAN)=========================================$(RESET)"
+	@echo "   Comandos de Simulación BCH (TFG)      "
+	@echo "$(CYAN)=========================================$(RESET)"
+	@echo "$(GOLD)make$(RESET)                - Compila el simulador"
+	@echo "$(GOLD)make run$(RESET)            - Ejecuta con M=7 T=10"
+	@echo "$(GOLD)make run M=4 T=2$(RESET)    - Ejecuta BCH(15,7)"
+	@echo "$(GOLD)make run FILE=img.bmp$(RESET) - Procesa un archivo real"
+	@echo "$(GOLD)make clean$(RESET)          - Borra todo (build y resultados)"
+	@echo "$(CYAN)-----------------------------------------$(RESET)"
 
 -include $(DEPS)
