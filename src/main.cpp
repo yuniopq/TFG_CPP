@@ -95,6 +95,7 @@ SimulationConfig parseArguments(int argc, char* argv[]) {
     if (argc >= 3) {
         cfg.m = stoi(argv[1]);
         cfg.t = stoi(argv[2]);
+        cfg.max_frames = ((2 << cfg.m) > 1000) ? 10000 : 1000000;
         if (argc >= 4) cfg.ebno_min = stod(argv[3]);
         if (argc >= 5) cfg.ebno_max = stod(argv[4]);
         if (argc >= 6) cfg.step = stod(argv[5]);
@@ -136,10 +137,9 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
     // Cada iter procesa un bloque independiente; usamos copias locales de BCH y Channel por hilo.
     #pragma omp parallel
     {
-        std::mt19937 rng((unsigned)time(nullptr) ^ (unsigned)omp_get_thread_num());
-        std::uniform_int_distribution<int> bitdist(0,1);
+        std::mt19937 rng(std::random_device{}());
 
-        BCH_Codec local_bch = bch; // copia local segura
+        BCH_Codec local_bch = bch;
         Channel local_channel = channel;
 
         #pragma omp for schedule(dynamic)
@@ -157,7 +157,7 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
             if (cfg.use_file) {
                 for (int i = 0; i < k; i++) message[i] = file_bits[iter * k + i];
             } else {
-                for (int i = 0; i < k; i++) message[i] = (uint16_t)bitdist(rng);
+                for (int i = 0; i < k; i++) message[i] = (uint16_t)(rng() % 2);
             }
 
             // Codificación
@@ -212,13 +212,20 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
     }
 
     // Cálculos finales
-    res.ber = (frames > 0) ? (double)total_bit_errors / (frames * k) : 0;
-    res.ber_uncoded = (frames > 0) ? (double)total_bit_errors_uncoded / (frames * k) : 0;
-    res.fer = (frames > 0) ? (double)total_frame_errors / frames : 0;
-    res.frames_simulated = frames;
-    res.avg_enc_us = (frames > 0) ? (double)total_enc_time / frames : 0;
-    res.avg_dec_us = (frames > 0) ? (double)total_dec_time / frames : 0;
-
+    long long total_bits = frames * k;
+    if (frames > 0) {
+        res.ber = (1.0 * total_bit_errors) / total_bits;
+        res.ber_uncoded = (1.0 * total_bit_errors_uncoded) / total_bits;
+        res.fer = (1.0 * total_frame_errors) / frames;
+        res.avg_enc_us = (1.0 * total_enc_time) / frames;
+        res.avg_dec_us = (1.0 * total_dec_time) / frames;
+    } else {
+        res.ber = 0;
+        res.ber_uncoded = 0;
+        res.fer = 0;
+        res.avg_enc_us = 0;
+        res.avg_dec_us = 0;
+    }
     return res;
 }
 // --- Exportación Actualizada ---
@@ -228,7 +235,6 @@ void exportCSV(const SimulationConfig& cfg, const vector<PointResults>& all_resu
     string filename = "results/csv/BCH_m" + to_string(cfg.m) + "_t" + to_string(cfg.t) + ".csv";
     
     ofstream outfile(filename, ios::trunc);
-    // Añade "ber_uncoded" a la cabecera
     outfile << "m,t,n,k,ebno_db,ber,ber_uncoded,fer,frames,avg_enc_us,avg_dec_us\n";
     for (const auto& r : all_results) {
         outfile << cfg.m << "," << cfg.t << "," << n << "," << k << "," 
