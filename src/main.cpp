@@ -7,30 +7,15 @@
 #include <cmath>
 #include <sys/stat.h>
 #include <random>
-#include <filesystem>
+#include <omp.h>
 
 #include "GaloisField.h"
 #include "BCH_Codec.h"
 #include "Channel.h"
 #include "Polynomial.h"
 
-using std::vector;
-using std::string;
-using std::cout;
-using std::cerr;
-using std::endl;
-using std::ofstream;
-using std::ifstream;
-using std::ios;
-using std::to_string;
-using std::setw;
-using std::fixed;
-using std::setprecision;
-using std::scientific;
-using std::invalid_argument;
-using std::chrono::high_resolution_clock;
-using std::chrono::duration_cast;
-using std::chrono::microseconds;
+using namespace std;
+using namespace std::chrono;
 
 // --- Estructuras Actualizadas ---
 struct SimulationConfig {
@@ -41,7 +26,9 @@ struct SimulationConfig {
     double step = 1.0;
     int min_frame_errors = 100; 
     long max_frames = 1000000;  
-    bool stop_early = true;
+
+    bool use_file = false;      
+    string input_path = "";     
 };
 
 struct PointResults {
@@ -55,19 +42,18 @@ struct PointResults {
 };
 
 std::vector<uint16_t> readFileToBits(const std::string& path){
-    ifstream file(path, ios::binary);
-    vector<uint16_t> bits;
+    std::ifstream file(path, std::ios::binary);
+    std::vector<uint16_t> bits;
+    char byte;
 
     if (!file)
         throw std::runtime_error("Could not open file: " + path);
 
-    int c;
-    while ((c = file.get()) != EOF) {
-        unsigned char u = static_cast<unsigned char>(c);
-        for (int i = 0; i < 8; i++) {
-            bits.push_back((u & (1u << i)) ? 1 : 0);
-        }
-    }
+    while(file.get(byte))
+        for(int i = 0; i < 8; i++)
+            bits.push_back(byte & (1 << i)? 1 : 0);
+        
+    
     return bits;
 }
 
@@ -107,12 +93,11 @@ int getDefaultPrimitivePoly(int m) {
 SimulationConfig parseArguments(int argc, char* argv[]) {
     SimulationConfig cfg;
     if (argc >= 3) {
-        cfg.m = std::stoi(argv[1]);
-        cfg.t = std::stoi(argv[2]);
-        if (argc >= 4) cfg.ebno_min = std::stod(argv[3]);
-        if (argc >= 5) cfg.ebno_max = std::stod(argv[4]);
-        if (argc >= 6) cfg.step = std::stod(argv[5]);
-        if (argc >= 7) cfg.stop_early = std::stoi(argv[6]) != 0;
+        cfg.m = stoi(argv[1]);
+        cfg.t = stoi(argv[2]);
+        if (argc >= 4) cfg.ebno_min = stod(argv[3]);
+        if (argc >= 5) cfg.ebno_max = stod(argv[4]);
+        if (argc >= 6) cfg.step = stod(argv[5]);
     }
     return cfg;
 }
@@ -123,14 +108,14 @@ void validateParameters(const SimulationConfig& cfg) {
     if (cfg.t <= 0 || 2LL * cfg.t >= n) throw invalid_argument("Capacidad t excedida");
 }
 
-void generateRandomMessage(int k, std::vector<uint16_t>& msg, std::mt19937& rng) {
-    msg.resize(k);
-    std::uniform_int_distribution<int> dist(0, 1);
-    for (int i = 0; i < k; i++) msg[i] = static_cast<uint16_t>(dist(rng));
+vector<uint16_t> generateRandomMessage(int k) {
+    vector<uint16_t> msg(k);
+    for (int i = 0; i < k; i++) msg[i] = rand() % 2;
+    return msg;
 }
 
-// --- Motor de Simulación ---
-PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, const SimulationConfig& cfg, std::mt19937& rng) {
+PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, const SimulationConfig& cfg, 
+                           const std::vector<uint16_t>& file_bits, std::vector<uint16_t>& out_corrected_bits) {
     PointResults res;
     res.ebno_db = ebno_db;
     
@@ -139,87 +124,111 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
     double rate = (double)k / n;
     double esno_db = ebno_db + 10.0 * log10(rate); 
     
-    long total_bit_errors = 0;
-    long total_bit_errors_uncoded = 0;
-    long total_frame_errors = 0;
-    long frames = 0;
-    long long total_enc_time = 0; // <--- Acumulador codificación
-    long long total_dec_time = 0; // <--- Acumulador decodificación
+    long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_frame_errors = 0, frames = 0;
+    long long total_enc_time = 0, total_dec_time = 0;
 
-    // Reusar buffers para disminuir allocations
-    vector<uint16_t> message;
-    vector<uint16_t> encoded;
-    vector<uint16_t> noisy;
-    vector<uint16_t> decoded;
-    message.reserve(k);
-    encoded.reserve(n);
-    decoded.reserve(k);
+    // Reservar espacio para los bits de salida si es modo archivo
+    if (cfg.use_file) out_corrected_bits.clear();
 
-    while (total_frame_errors < cfg.min_frame_errors && frames < cfg.max_frames) {
-        generateRandomMessage(k, message, rng);
+    long max_iterations = cfg.use_file ? (file_bits.size() / k) : cfg.max_frames;
 
-        // --- CAMINO A: Con BCH ---
-        auto start_enc = high_resolution_clock::now();
-        encoded = bch.encode(message);
-        auto end_enc = high_resolution_clock::now();
-        total_enc_time += duration_cast<microseconds>(end_enc - start_enc).count();
+    // Paralelizamos iteraciones por frame con OpenMP.
+    // Cada iter procesa un bloque independiente; usamos copias locales de BCH y Channel por hilo.
+    #pragma omp parallel
+    {
+        std::mt19937 rng((unsigned)time(nullptr) ^ (unsigned)omp_get_thread_num());
+        std::uniform_int_distribution<int> bitdist(0,1);
 
-        // Canal
-        noisy = channel.applyAWGNHardDecision(encoded, esno_db);
+        BCH_Codec local_bch = bch; // copia local segura
+        Channel local_channel = channel;
 
-        // --- Cronometrar Decodificación ---
-        auto start_dec = high_resolution_clock::now();
-        bool success = bch.decode(noisy, decoded);
-        auto end_dec = high_resolution_clock::now();
-        total_dec_time += duration_cast<microseconds>(end_dec - start_dec).count();
+        #pragma omp for schedule(dynamic)
+        for (long iter = 0; iter < max_iterations; ++iter) {
+            // Lectura atómica del contador de errores para posible parada temprana
+            if (!cfg.use_file) {
+                long cur_frame_errors;
+                #pragma omp atomic read
+                cur_frame_errors = total_frame_errors;
+                if (cur_frame_errors >= cfg.min_frame_errors) continue;
+            }
 
-        if (decoded.size() != static_cast<size_t>(k)) {
-            success = false;
-            decoded.assign(k, 0);
+            // Fuente de mensajes
+            vector<uint16_t> message(k);
+            if (cfg.use_file) {
+                for (int i = 0; i < k; i++) message[i] = file_bits[iter * k + i];
+            } else {
+                for (int i = 0; i < k; i++) message[i] = (uint16_t)bitdist(rng);
+            }
+
+            // Codificación
+            auto t_enc_start = high_resolution_clock::now();
+            vector<uint16_t> encoded = local_bch.encode(message);
+            auto enc_us = duration_cast<microseconds>(high_resolution_clock::now() - t_enc_start).count();
+
+            // Canal
+            vector<uint16_t> noisy = local_channel.applyAWGNHardDecision(encoded, esno_db);
+
+            // Decodificación
+            auto t_dec_start = high_resolution_clock::now();
+            vector<uint16_t> decoded;
+            bool success = local_bch.decode(noisy, decoded);
+            auto dec_us = duration_cast<microseconds>(high_resolution_clock::now() - t_dec_start).count();
+
+            // Guardado concurrente (modo archivo) bajo sección crítica
+            if (cfg.use_file) {
+                #pragma omp critical
+                out_corrected_bits.insert(out_corrected_bits.end(), decoded.begin(), decoded.end());
+            }
+
+            // Métricas
+            vector<uint16_t> noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
+            int bit_errors_in_frame = 0;
+            int bit_errors_uncoded_in_frame = 0;
+            for (int i = 0; i < k; i++) {
+                if (message[i] != noisy_uncoded[i]) bit_errors_uncoded_in_frame++;
+                if (message[i] != decoded[i]) bit_errors_in_frame++;
+            }
+
+            if (!success || bit_errors_in_frame > 0) {
+                #pragma omp atomic
+                total_frame_errors++;
+                #pragma omp atomic
+                total_bit_errors += bit_errors_in_frame;
+            } else {
+                // si no hubo errores en el frame, no sumamos a total_bit_errors
+            }
+
+            #pragma omp atomic
+            total_bit_errors_uncoded += bit_errors_uncoded_in_frame;
+
+            #pragma omp atomic
+            total_enc_time += enc_us;
+            #pragma omp atomic
+            total_dec_time += dec_us;
+
+            #pragma omp atomic
+            frames++;
         }
-
-        // Conteo de errores
-        int bit_errors_in_frame = 0;
-        for (int i = 0; i < k; i++) {
-            if (message[i] != decoded[i]) bit_errors_in_frame++;
-        }
-
-        // --- CAMINO B: Sin codificar ---
-        vector<uint16_t> noisy_uncoded = channel.applyAWGNHardDecision(message, ebno_db);
-
-        // Conteo de errores Uncoded
-        for (int i = 0; i < k; i++) {
-            if (message[i] != noisy_uncoded[i]) total_bit_errors_uncoded++;
-        }
-
-        if (!success || bit_errors_in_frame > 0) {
-            total_frame_errors++;
-            total_bit_errors += bit_errors_in_frame;
-        }
-        frames++;
     }
 
-    if (frames > 0) {
-        res.ber = static_cast<double>(total_bit_errors) / (frames * k);
-        res.ber_uncoded = static_cast<double>(total_bit_errors_uncoded) / (frames * k);
-        res.fer = static_cast<double>(total_frame_errors) / frames;
-        res.frames_simulated = frames;
-        res.avg_enc_us = static_cast<double>(total_enc_time) / frames; // <--- Media codif
-        res.avg_dec_us = static_cast<double>(total_dec_time) / frames; // <--- Media decodif
-    } else {
-        res.ber = res.ber_uncoded = res.fer = 0.0;
-        res.frames_simulated = 0;
-        res.avg_enc_us = res.avg_dec_us = 0.0;
-    }
+    // Cálculos finales
+    res.ber = (frames > 0) ? (double)total_bit_errors / (frames * k) : 0;
+    res.ber_uncoded = (frames > 0) ? (double)total_bit_errors_uncoded / (frames * k) : 0;
+    res.fer = (frames > 0) ? (double)total_frame_errors / frames : 0;
+    res.frames_simulated = frames;
+    res.avg_enc_us = (frames > 0) ? (double)total_enc_time / frames : 0;
+    res.avg_dec_us = (frames > 0) ? (double)total_dec_time / frames : 0;
+
     return res;
 }
-
 // --- Exportación Actualizada ---
 void exportCSV(const SimulationConfig& cfg, const vector<PointResults>& all_results, int n, int k) {
-    std::filesystem::create_directories("results/csv");
+    mkdir("results", 0777);
+    mkdir("results/csv", 0777);
     string filename = "results/csv/BCH_m" + to_string(cfg.m) + "_t" + to_string(cfg.t) + ".csv";
     
     ofstream outfile(filename, ios::trunc);
+    // Añade "ber_uncoded" a la cabecera
     outfile << "m,t,n,k,ebno_db,ber,ber_uncoded,fer,frames,avg_enc_us,avg_dec_us\n";
     for (const auto& r : all_results) {
         outfile << cfg.m << "," << cfg.t << "," << n << "," << k << "," 
@@ -232,9 +241,16 @@ void exportCSV(const SimulationConfig& cfg, const vector<PointResults>& all_resu
 
 int main(int argc, char* argv[]) {
     try {
-        // Inicializar RNG de alta calidad
-        std::mt19937 rng(static_cast<unsigned int>(high_resolution_clock::now().time_since_epoch().count()));
+        srand(time(nullptr));
         SimulationConfig cfg = parseArguments(argc, argv);
+        
+        // --- CONFIGURACIÓN PARA MODO ARCHIVO (Opcional) ---
+        // Puedes activar esto mediante flags o dejarlo preparado así:
+        if (argc >= 7) { 
+            cfg.use_file = true;
+            cfg.input_path = argv[6]; // ./sim 7 10 0 8 1 imagen.bmp
+        }
+
         validateParameters(cfg);
 
         int prim_poly = getDefaultPrimitivePoly(cfg.m);
@@ -243,27 +259,46 @@ int main(int argc, char* argv[]) {
         int n = bch.getN();
         int k = bch.getK();
 
+        // 1. Cargar bits si estamos en modo archivo
+        vector<uint16_t> file_bits;
+        if (cfg.use_file) {
+            cout << "[FILE] Cargando archivo: " << cfg.input_path << endl;
+            file_bits = readFileToBits(cfg.input_path);
+            cout << "[FILE] Bits totales: " << file_bits.size() << " (" << file_bits.size()/k << " bloques)" << endl;
+        }
+
         cout << "\n=== SIMULACION BCH (" << n << "," << k << ") t=" << cfg.t << " ===" << endl;
         cout << "------------------------------------------------------------------------" << endl;
-        cout << setw(10) << "Eb/N0(dB)" << setw(15) << "BER" << setw(15) << "FER" << setw(12) << "Frames" << endl;
+        cout << setw(10) << "Eb/N0(dB)" << setw(15) << "BER" << setw(15) << "BER_Uncoded" << setw(15) << "FER" << setw(12) << "Frames" << endl;
         cout << "------------------------------------------------------------------------" << endl;
 
         vector<PointResults> all_results;
         for (double e = cfg.ebno_min; e <= cfg.ebno_max; e += cfg.step) {
-            PointResults pr = simulatePoint(bch, channel, e, cfg, rng);
+            
+            vector<uint16_t> corrected_bits; // Aquí se guardará el archivo recuperado
+            
+            // Llamada corregida a simulatePoint
+            PointResults pr = simulatePoint(bch, channel, e, cfg, file_bits, corrected_bits);
             all_results.push_back(pr);
             
             cout << setw(10) << fixed << setprecision(1) << e 
-                 << setw(15) << scientific << setprecision(3) << pr.ber 
-                 << setw(15) << pr.fer 
-                 << setw(12) << fixed << pr.frames_simulated << endl;
+                << setw(15) << scientific << setprecision(3) << pr.ber 
+                << setw(15) << scientific << setprecision(3) << pr.ber_uncoded 
+                << setw(15) << pr.fer 
+                << setw(12) << fixed << (long)pr.frames_simulated << endl;
+            // 2. Si estamos en modo archivo, guardamos el resultado de CADA Eb/N0
+            if (cfg.use_file) {
+                string out_name = "results/out_EbNo_" + to_string((int)e) + "_" + cfg.input_path;
+                corrected_bits.resize(file_bits.size()); // Ajustar al tamaño original (quitar padding)
+                saveBitsToFile(corrected_bits, out_name);
+            }
             
-             if (cfg.stop_early && pr.fer == 0.0 && e > 5.0) break;
+            if (pr.fer == 0) break; 
         }
 
         exportCSV(cfg, all_results, n, k);
 
-    } catch (const std::exception& e) {
+    } catch (const exception& e) {
         cerr << "[!] Error: " << e.what() << endl;
         return 1;
     }
