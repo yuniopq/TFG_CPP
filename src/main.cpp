@@ -226,6 +226,7 @@ PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, con
         res.avg_enc_us = 0;
         res.avg_dec_us = 0;
     }
+    res.frames_simulated = frames;
     return res;
 }
 // --- Exportación Actualizada ---
