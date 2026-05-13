@@ -1,0 +1,45 @@
+\chapter{Introducción}
+
+\section{Motivación}
+
+En los sistemas modernos de comunicación digital y almacenamiento masivo, la transmisión y conservación fiable de la información constituye uno de los principales retos tecnológicos. Los datos transmitidos a través de canales físicos o almacenados en medios no volátiles —como memorias RAM, memorias NAND Flash o discos de estado sólido (SSD)— están inevitablemente expuestos a diversas fuentes de perturbación, como ruido térmico, interferencias electromagnéticas o degradación física de las celdas de memoria. Estas alteraciones provocan errores a nivel de bit que, de no ser tratados, corrompen la información original.
+
+Desde la perspectiva de la seguridad de la información, la fiabilidad a nivel de hardware representa la primera línea de defensa para garantizar la \textbf{integridad de los datos}, uno de los pilares fundamentales de la ciberseguridad. Si la información se corrompe en la capa física o de enlace y el sistema es incapaz de recuperarla, cualquier medida de seguridad lógica en capas superiores queda comprometida. Para mitigar estos efectos, la teoría de la codificación introduce técnicas que permiten detectar y corregir errores sin necesidad de retransmisión.
+
+Dentro de este ámbito, los códigos BCH (Bose–Chaudhuri–Hocquenghem) destacan como una familia fundamental de códigos de bloque cíclicos. Su capacidad para corregir múltiples errores de forma eficiente los ha convertido en un estándar industrial en sistemas de almacenamiento y comunicaciones robustas. Además, su profundo fundamento matemático basado en los Cuerpos de Galois ($GF(2^m)$) no solo resuelve problemas de transmisión, sino que sienta las bases algebraicas necesarias para comprender esquemas criptográficos avanzados y algoritmos de resistencia post-cuántica.
+
+El estudio y la implementación algorítmica de estos códigos resultan esenciales para comprender los mecanismos que garantizan la tolerancia a fallos en la arquitectura de computadores moderna y evaluar su robustez frente a diferentes condiciones de ruido.
+
+\section{Objetivos}
+
+El objetivo principal de este Trabajo Fin de Grado es el diseño y la implementación de un simulador funcional de códigos BCH que permita analizar su rendimiento, tanto en su capacidad de corrección de errores como en su eficiencia algorítmica, dentro de un entorno controlado con ruido.
+
+Para alcanzar este objetivo general, se plantean los siguientes objetivos específicos:
+
+\begin{itemize}
+    \item Implementar la aritmética necesaria para operar en Cuerpos de Galois $GF(2^m)$, optimizando las operaciones mediante el uso de tablas de búsqueda (exponenciales y logarítmicas) para maximizar la eficiencia computacional.
+    \item Desarrollar un módulo de codificación sistemática capaz de generar palabras de código BCH garantizando la separación clara entre los datos originales y los bits de paridad.
+    \item Implementar un decodificador algebraico completo, utilizando el algoritmo iterativo de \textbf{Berlekamp–Massey} para hallar el polinomio localizador de errores, seguido de la \textbf{Búsqueda de Chien} para determinar la posición exacta de los mismos y proceder a su corrección.
+    \item Simular un canal de transmisión con ruido estocástico (como un Canal Binario Simétrico, BSC) que inyecte errores aleatorios en las tramas transmitidas.
+    \item Analizar el rendimiento del sistema mediante la obtención de curvas de la tasa de error de bit (BER) frente a distintas condiciones del canal, evaluando el compromiso entre la redundancia añadida y la robustez de la información.
+\end{itemize}
+
+\section{Metodología}
+
+Para la realización de este proyecto se ha seguido una metodología iterativa orientada al desarrollo progresivo y modular del software. En una primera fase, se han consolidado los fundamentos teóricos relativos a la teoría de la información, el álgebra en cuerpos finitos y la estructura de los códigos cíclicos.
+
+Posteriormente, se ha procedido al desarrollo del simulador utilizando el lenguaje de programación \textbf{Python}. Esta elección se justifica por su versatilidad, su excelente ecosistema para la manipulación de estructuras de datos y su capacidad para la generación de gráficas de rendimiento. Se ha priorizado un diseño modular y estructurado que permita verificar cada bloque (codificador, canal, decodificador) de forma independiente, facilitando además la posible escalabilidad del proyecto a otros esquemas de corrección de errores en el futuro.
+
+Finalmente, se ha diseñado una batería de pruebas mediante simulaciones de Monte Carlo para someter al sistema a diferentes niveles de degradación, recopilando métricas cuantitativas que respaldan el análisis de rendimiento.
+
+\section{Estructura de la memoria}
+
+La presente memoria se organiza en los siguientes capítulos para guiar al lector desde la base teórica hasta los resultados prácticos:
+
+En el \textbf{Capítulo \ref{ch:fundamentos}}, se exponen los fundamentos matemáticos necesarios, abarcando la aritmética de Cuerpos de Galois y las propiedades algebraicas que definen a los códigos BCH.
+
+El \textbf{Capítulo \ref{ch:implementacion}} detalla la arquitectura del simulador y las decisiones de diseño adoptadas durante la implementación algorítmica de la codificación y la decodificación (algoritmo de Berlekamp-Massey y Búsqueda de Chien).
+
+En el \textbf{Capítulo \ref{ch:analisis}}, se definen los escenarios de simulación, presentando y discutiendo las gráficas de rendimiento (curvas BER) obtenidas experimentalmente.
+
+Por último, el \textbf{Capítulo \ref{ch:conclusiones}} recoge las conclusiones finales derivadas del trabajo, valorando el cumplimiento de los objetivos y proponiendo futuras líneas de investigación o mejora orientadas a la fiabilidad y seguridad de los datos.

@@ -1,0 +1,30 @@
+\chapter{Fundamentos Matemáticos}
+\label{ch:fundamentos}
+
+Para comprender los algoritmos de codificación y decodificación implementados en este proyecto, es imprescindible establecer primero el marco matemático en el que operan: la aritmética de polinomios sobre Cuerpos Finitos.
+
+\section{Estructuras Algebraicas Básicas}
+
+Antes de abordar los Cuerpos de Galois, conviene repasar brevemente la estructura algebraica que lo compone.
+
+
+\begin{definicion}[Cuerpo]
+Un cuerpo (o \textit{field} en la literatura anglosajona) es un conjunto $F$ dotado de dos operaciones binarias, típicamente denominadas suma ($+$) y multiplicación ($\cdot$), tal que:
+\begin{itemize}
+    \item $F$ es un grupo abeliano bajo la operación de suma, con el $0$ como elemento neutro.
+    \item Los elementos no nulos de $F$ forman un grupo abeliano bajo la operación de multiplicación, con el $1$ como elemento neutro.
+    \item La multiplicación es distributiva respecto a la suma: $a \cdot (b + c) = (a \cdot b) + (a \cdot c)$ para todo $a, b, c \in F$.
+\end{itemize}
+\end{definicion}
+
+El cuerpo de los números reales ($\mathbb{R}$) o los complejos ($\mathbb{C}$) son cuerpos infinitos. Sin embargo, en la ingeniería de telecomunicaciones y la informática digital, la información se representa mediante un número finito de estados (bits). Por ello, el interés de la teoría de códigos se centra en los cuerpos que contienen un número finito de elementos.
+
+\section{Cuerpos de Galois $\mathbf{GF(p^m)}$}
+
+Un cuerpo finito o Cuerpo de Galois, denotado en honor al matemático francés Évariste Galois, es un cuerpo que contiene un número finito de elementos. 
+
+\begin{teorema}
+El número de elementos de un cuerpo finito (su orden) debe ser de la forma $q = p^m$, donde $p$ es un número primo (denominado la característica del cuerpo) y $m$ es un número entero positivo. El cuerpo finito de $q$ elementos se denota como $GF(q)$ o $\mathbb{F}_q$.
+\end{teorema}
+
+Dado que operamos en base binaria, la codificación de canal utiliza ampliamente campos de característica $p = 2$. Así, los elementos del cuerpo $GF(2^m)$ pueden representarse mediante secuencias binarias de longitud $m$, proporcionando una estructura algebraica perfecta para manipular bytes o palabras de máquina.
