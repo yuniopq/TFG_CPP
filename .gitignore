@@ -1,7 +1,7 @@
 # --- Binarios y Ejecutables ---
 # Ignora el ejecutable principal
-bch_test
-bch_test.exe
+bch_sim
+bch_sim.exe
 *.out
 *.app
 
