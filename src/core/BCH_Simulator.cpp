@@ -21,12 +21,12 @@ void BCH_Simulator::run() {
 
     vector<uint16_t> file_bits;
     if (cfg.use_file) {
-        cout << "[FILE] Cargando archivo: " << cfg.input_path << endl;
+        cout << "[FILE] Loading file: " << cfg.input_path << endl;
         file_bits = readFileToBits(cfg.input_path);
-        cout << "[FILE] Bits totales: " << file_bits.size() << " (" << file_bits.size()/k << " bloques)" << endl;
+        cout << "[FILE] Total bits: " << file_bits.size() << " (" << file_bits.size()/k << " blocks)" << endl;
     }
 
-    cout << "\n=== SIMULACION BCH (" << n << "," << k << ") t=" << cfg.t << " ===" << endl;
+    cout << "\n=== BCH SIMULATION (" << n << "," << k << ") t=" << cfg.t << " ===" << endl;
     cout << "------------------------------------------------------------------------" << endl;
     cout << setw(10) << "Eb/N0(dB)" << setw(15) << "BER" << setw(15) << "BER_Uncoded" << setw(15) << "CWER" << setw(15) << "Codewords" << endl;
     cout << "------------------------------------------------------------------------" << endl;
@@ -144,7 +144,7 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
     return res;
 }
 
-// Métodos auxiliares movidos de main a la clase
+// Auxiliary methods moved from main into the class
 int BCH_Simulator::getDefaultPrimitivePoly(int m) {
     switch (m) {
         case 3:  return 0b1011;

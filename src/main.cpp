@@ -17,13 +17,13 @@ SimulationConfig parseArguments(int argc, char* argv[]) {
         }
     }
     int n = (1 << cfg.m) - 1;
-    // Si no estamos en modo archivo, calculamos los codewords necesarios
+    // If we are not in file mode, estimate the number of codewords needed
     if (!cfg.use_file) {
-        // 10^8 bits es un buen compromiso entre precisión y velocidad
+        // 10^8 bits is a good trade-off between precision and speed
         long long target_bits = 100000000; 
         cfg.max_codewords = target_bits / n;
         
-        // Aseguramos un mínimo de codewords para m muy grandes
+        // Enforce a minimum number of codewords for very large m
         if (cfg.max_codewords < 100) cfg.max_codewords = 100; 
     }
     return cfg;
@@ -31,18 +31,18 @@ SimulationConfig parseArguments(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     try {
-        // Semilla para cosas que no usen el motor de la clase
+        // Seed for code outside the class RNGs
         srand(time(nullptr));
 
-        // 1. Obtener configuración
+        // 1. Parse configuration
         SimulationConfig cfg = parseArguments(argc, argv);
 
-        // 2. Validar (Lógica básica)
+        // 2. Validate basic constraints
         int n_check = (1 << cfg.m) - 1;
-        if (cfg.m < 1 || cfg.m > 15) throw invalid_argument("m debe estar entre 1 y 15");
-        if (cfg.t <= 0 || 2LL * cfg.t >= n_check) throw invalid_argument("Capacidad t excedida");
+        if (cfg.m < 1 || cfg.m > 15) throw invalid_argument("m must be between 1 and 15");
+        if (cfg.t <= 0 || 2LL * cfg.t >= n_check) throw invalid_argument("t capacity exceeded");
 
-        // 3. Lanzar simulador
+        // 3. Launch simulator
         BCH_Simulator simulator(cfg);
         simulator.run();
 

@@ -10,7 +10,7 @@
 class BCH_Codec {
 private:
     int m;                          // Degree of GF(2^m)
-    int t;                          // Error correction capability
+    int t;                          // Error-correction capability
     int n;                          // Code length (2^m - 1)
     int k;                          // Information bits
     GaloisField gf;                 // Galois Field
@@ -21,7 +21,7 @@ private:
 public:
     BCH_Codec(int m, int t, int primitive_poly);
     
-    // Encode: add parity bits to message
+    // Encode: add parity bits to the message
     std::vector<uint16_t> encode(const std::vector<uint16_t>& message);
 
     std::vector<uint16_t> encodeLFSR(const std::vector<uint16_t> &message);

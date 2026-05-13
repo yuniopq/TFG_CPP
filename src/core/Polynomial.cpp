@@ -112,7 +112,7 @@ void Polynomial::print() {
     for (int i = getDegree(); i >= 0; i--) {
         int c = getCoef(i);
         if (c != 0) {
-            if (!first_term) std::cout << " + "; // Imprime el + ANTES del siguiente término
+            if (!first_term) std::cout << " + "; // Print the + BEFORE the next term
             
             if (i == 0) {
                 std::cout << c;

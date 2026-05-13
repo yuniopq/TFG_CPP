@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include <cassert>
 
-// Inicialización de estáticos (fuera de la clase)
+// Static initialization (outside the class)
 std::vector<uint16_t> GaloisField::log_table;
 std::vector<uint16_t> GaloisField::exp_table;
 int GaloisField::initialized_m = -1;
@@ -18,7 +18,7 @@ GaloisField::GaloisField(int m, int primitive_poly)
     
     size = 1 << m;
 
-    // Solo calculamos si es un campo nuevo
+    // Only compute this if it is a new field
     if (initialized_m != m) {
         log_table.assign(size, 0);
         exp_table.assign(2 * size, 0);

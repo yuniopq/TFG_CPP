@@ -75,7 +75,7 @@ public:
     }
 
     void shiftLeft(size_t shift){
-        // Casos base: si no hay que mover nada o si movemos más bits de los que existen
+        // Base cases: no movement needed, or we move more bits than exist
         if (shift == 0 || bitCount == 0) return;
         if (shift >= bitCount) {
             std::fill(data.begin(), data.end(), 0); // Todo se vuelve ceros
@@ -84,7 +84,7 @@ public:
         size_t blockShift = shift / 64;
         size_t bitShift = shift % 64;
         
-        // Mover bloques completos
+        // Move complete blocks
         if (blockShift > 0){
             for (size_t i = data.size(); i > 0; --i){
                 size_t idx = i - 1;
@@ -95,7 +95,7 @@ public:
             }
         }
         
-        // Mover bits dentro de los bloques
+        // Move bits within the blocks
         if (bitShift > 0){
             uint64_t carry = 0, next_carry = 0;
             for (size_t i=0; i<data.size(); ++i){
@@ -137,11 +137,11 @@ public:
 
             uint64_t word = gx.data[i];
 
-            // si bit_shift es 0, 64-0 es 64, y word de tamaño 64 desplazarlo a la derecha 64 es un comportamiento indefinido
+            // If bit_shift is 0, 64-0 is 64, and shifting a 64-bit word right by 64 is undefined behavior
             next_carry = (bit_shift == 0) ? 0 : (word >> (64 - bit_shift));
 
-            // data[dst] equivale a desplazr bloque completo de gx a donde mismo grado que el data actual
-            // word << bit_shift desplaza los bits dentro del bloque para alinear con el grado actual
+            // data[dst] is equivalent to shifting the whole block to the same degree as the current data
+            // word << bit_shift shifts the bits within the block to align with the current degree
             data[dst] ^= (word << bit_shift) | carry;
             carry = next_carry;
         }

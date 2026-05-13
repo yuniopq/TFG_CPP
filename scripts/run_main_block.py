@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-BLOQUE PRINCIPAL: Fijar m y Barrer t
+MAIN BLOCK: Fix m and sweep t
 
-Objetivo: Ver cómo cambia BER, CWER y tiempo cuando aumentas la redundancia dentro del mismo campo.
+Goal: See how BER, CWER, and time change as redundancy increases within the same field.
 
-Configuración:
-- m=4 (pequeño):   t = 1, 2, 3, 4        → n=15, redundancia 6.7%-26.7%
-- m=7 (medio):     t = 2, 5, 10, 15      → n=127, redundancia 11%-88%
-- m=15 (grande):   t = 50, 100, 200, 300 → n=32767, redundancia 0.23%-0.92%
+Configuration:
+- m=4 (small):   t = 1, 2, 3, 4        → n=15, redundancy 6.7%-26.7%
+- m=7 (medium):  t = 2, 5, 10, 15      → n=127, redundancy 11%-88%
+- m=15 (large):  t = 50, 100, 200, 300 → n=32767, redundancy 0.23%-0.92%
 
-Rango Eb/N0: 0-12 dB (paso 1 dB)
+Eb/N0 range: 0-12 dB (1 dB step)
 """
 
 import subprocess
@@ -19,30 +19,30 @@ import time
 from pathlib import Path
 
 # =============================================================================
-# CONFIGURACIÓN: ESCENARIOS PRINCIPALES
+# CONFIGURATION: MAIN SCENARIOS
 # =============================================================================
 
 ESCENARIOS = [
-    # m = 4 (pequeño): n = 15
-    {"m": 4, "t": 1,   "label": "m=4, t=1   (6.7% redundancia)"},
-    {"m": 4, "t": 2,   "label": "m=4, t=2   (13.3% redundancia)"},
-    {"m": 4, "t": 3,   "label": "m=4, t=3   (20% redundancia)"},
-    {"m": 4, "t": 4,   "label": "m=4, t=4   (26.7% redundancia)"},
+    # m = 4 (small): n = 15
+    {"m": 4, "t": 1,   "label": "m=4, t=1   (6.7% redundancy)"},
+    {"m": 4, "t": 2,   "label": "m=4, t=2   (13.3% redundancy)"},
+    {"m": 4, "t": 3,   "label": "m=4, t=3   (20% redundancy)"},
+    {"m": 4, "t": 4,   "label": "m=4, t=4   (26.7% redundancy)"},
     
-    # m = 7 (medio): n = 127
-    {"m": 7, "t": 2,   "label": "m=7, t=2   (11% redundancia)"},
-    {"m": 7, "t": 5,   "label": "m=7, t=5   (27.6% redundancia)"},
-    {"m": 7, "t": 10,  "label": "m=7, t=10  (55% redundancia)"},
-    {"m": 7, "t": 15,  "label": "m=7, t=15  (88% redundancia)"},
+    # m = 7 (medium): n = 127
+    {"m": 7, "t": 2,   "label": "m=7, t=2   (11% redundancy)"},
+    {"m": 7, "t": 5,   "label": "m=7, t=5   (27.6% redundancy)"},
+    {"m": 7, "t": 10,  "label": "m=7, t=10  (55% redundancy)"},
+    {"m": 7, "t": 15,  "label": "m=7, t=15  (88% redundancy)"},
     
-    # m = 15 (grande): n = 32767
-    {"m": 15, "t": 50,   "label": "m=15, t=50   (0.23% redundancia)"},
-    {"m": 15, "t": 100,  "label": "m=15, t=100  (0.46% redundancia)"},
-    {"m": 15, "t": 200,  "label": "m=15, t=200  (0.92% redundancia)"},
-    {"m": 15, "t": 300,  "label": "m=15, t=300  (1.37% redundancia)"},
+    # m = 15 (large): n = 32767
+    {"m": 15, "t": 50,   "label": "m=15, t=50   (0.23% redundancy)"},
+    {"m": 15, "t": 100,  "label": "m=15, t=100  (0.46% redundancy)"},
+    {"m": 15, "t": 200,  "label": "m=15, t=200  (0.92% redundancy)"},
+    {"m": 15, "t": 300,  "label": "m=15, t=300  (1.37% redundancy)"},
 ]
 
-# Configuración de la barrida de Eb/N0
+# Eb/N0 sweep configuration
 SNR_MIN  = 0.0
 SNR_MAX  = 12.0
 SNR_STEP = 1.0
@@ -54,31 +54,31 @@ SNR_STEP = 1.0
 def run_main_block():
     # Asegurar que el binario existe
     print("=" * 80)
-    print("BLOQUE PRINCIPAL: FIJAR m Y BARRER t")
+    print("MAIN BLOCK: FIX m AND SWEEP t")
     print("=" * 80)
     
-    print("\n🔨 Compilando proyecto...")
-    os.chdir("..")  # Ir a la raíz del proyecto
+    print("\n🔨 Building project...")
+    os.chdir("..")  # Go to the project root
     result = subprocess.run(["make", "all"], capture_output=True, text=True)
     
     if result.returncode != 0:
-        print("❌ Error en compilación:")
+        print("❌ Build error:")
         print(result.stderr)
         sys.exit(1)
     
-    print("✅ Compilación exitosa")
+    print("✅ Build successful")
     
     if not os.path.exists("results/csv"):
         os.makedirs("results/csv")
     
-    # Resumen de configuración
-    print(f"\n📊 Configuración:")
-    print(f"   - Rango Eb/N0: {SNR_MIN} a {SNR_MAX} dB (paso {SNR_STEP} dB)")
-    print(f"   - Total de escenarios: {len(ESCENARIOS)}")
-    print(f"   - Objetivo: Analizar BER, CWER y tiempo con redundancia creciente")
+    # Configuration summary
+    print(f"\n📊 Configuration:")
+    print(f"   - Eb/N0 range: {SNR_MIN} to {SNR_MAX} dB ({SNR_STEP} dB step)")
+    print(f"   - Total scenarios: {len(ESCENARIOS)}")
+    print(f"   - Goal: Analyze BER, CWER, and time with increasing redundancy")
     
     print("\n" + "=" * 80)
-    print("EJECUTANDO ESCENARIOS")
+    print("RUNNING SCENARIOS")
     print("=" * 80)
     
     # Ejecutar cada escenario
@@ -89,7 +89,7 @@ def run_main_block():
         m, t = esc["m"], esc["t"]
         label = esc["label"]
         
-        print(f"\n[{idx}/{len(ESCENARIOS)}] Ejecutando: {label}")
+        print(f"\n[{idx}/{len(ESCENARIOS)}] Running: {label}")
         
         # Construir comando
         comando = [
@@ -103,35 +103,35 @@ def run_main_block():
             result = subprocess.run(comando, check=True, capture_output=True, text=True)
             sim_time = time.time() - sim_start
             
-            # Buscar archivo generado
+            # Look for generated file
             csv_file = f"results/csv/BCH_m{m}_t{t}.csv"
             if os.path.exists(csv_file):
                 file_size = os.path.getsize(csv_file)
-                print(f"   ✅ Completado en {sim_time:.2f}s → {csv_file} ({file_size} bytes)")
+                print(f"   ✅ Completed in {sim_time:.2f}s → {csv_file} ({file_size} bytes)")
                 results_summary.append((label, "✅ OK", f"{sim_time:.2f}s"))
             else:
-                print(f"   ⚠️  No se generó archivo CSV después de {sim_time:.2f}s")
+                print(f"   ⚠️  No CSV generated after {sim_time:.2f}s")
                 results_summary.append((label, "⚠️  Sin CSV", f"{sim_time:.2f}s"))
                 
         except subprocess.CalledProcessError as e:
-            print(f"   ❌ Error durante ejecución")
+            print(f"   ❌ Error during execution")
             print(f"      stderr: {e.stderr}")
             results_summary.append((label, "❌ ERROR", "---"))
     
     total_time = time.time() - start_time
     
-    # Resumen final
+    # Final summary
     print("\n" + "=" * 80)
-    print("RESUMEN DE RESULTADOS")
+    print("RESULT SUMMARY")
     print("=" * 80)
-    print(f"\nTiempo total: {total_time:.2f}s ({total_time/60:.1f} minutos)\n")
+    print(f"\nTotal time: {total_time:.2f}s ({total_time/60:.1f} minutes)\n")
     
     for label, status, elapsed in results_summary:
         print(f"{status} | {label:45s} | {elapsed:>8s}")
     
     print("\n" + "=" * 80)
-    print("📁 Archivos CSV generados en: results/csv/")
-    print("📈 Para graficar resultados, ejecuta:")
+    print("📁 CSV files generated in: results/csv/")
+    print("📈 To plot the results, run:")
     print("   python3 scripts/plotter.py")
     print("=" * 80)
 
