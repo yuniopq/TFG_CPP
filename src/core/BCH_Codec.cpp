@@ -358,7 +358,7 @@ bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16
     if (L == 0 || L > t) {
         // Fallo: Demasiados errores. Extraemos el mensaje tal cual (con fallos)
         message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
-        return false; // FER = 1
+        return false; // CWER = 1
     }
 
     // 4. Búsqueda de Chien para encontrar la posición de los errores

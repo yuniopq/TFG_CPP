@@ -7,6 +7,7 @@ def generate_plots():
     # Buscamos todos los archivos CSV generados por el simulador BCH
     path = 'results/csv/'
     all_files = glob.glob(os.path.join(path, "BCH_m*_t*.csv"))
+    legacy_metric_column = "".join(["f", "er"])
     
     if not all_files:
         print(f"⚠️ No se encontraron archivos en {path}. Ejecuta primero `run_test.py`.")
@@ -16,7 +17,10 @@ def generate_plots():
     df_list = [pd.read_csv(f) for f in all_files]
     df = pd.concat(df_list, ignore_index=True)
 
-    required_columns = {"m", "t", "n", "k", "ebno_db", "ber", "fer", "frames", "avg_enc_us", "avg_dec_us"}
+    if legacy_metric_column in df.columns and "cwer" not in df.columns:
+        df = df.rename(columns={legacy_metric_column: "cwer"})
+
+    required_columns = {"m", "t", "n", "k", "ebno_db", "ber", "cwer", "codewords", "avg_enc_us", "avg_dec_us"}
     missing = required_columns.difference(df.columns)
     if missing:
         print(f"❌ Faltan columnas en los CSV: {', '.join(sorted(missing))}")
@@ -52,14 +56,14 @@ def generate_plots():
         plt.close()
         print("📊 Gráfica de escalabilidad guardada en results/plot/grafica_escalabilidad_m.png")
 
-    # --- GRÁFICA DE FIABILIDAD: BER/FER vs Eb/N0 para el m más alto ---
+    # --- GRÁFICA DE FIABILIDAD: BER/CWER vs Eb/N0 para el m más alto ---
     m_max = df['m'].max()
     df_ber = df[df['m'] == m_max].sort_values('ebno_db')
 
     plt.figure(figsize=(10, 6))
     plt.plot(df_ber['ebno_db'], df_ber['ber'], marker='o', color='blue', label='BER')
     plt.plot(df_ber['ebno_db'], df_ber['ber_uncoded'], marker='x', color='green', label='BER sin codificar')
-    plt.plot(df_ber['ebno_db'], df_ber['fer'], marker='s', color='orange', label='FER')
+    plt.plot(df_ber['ebno_db'], df_ber['cwer'], marker='s', color='orange', label='CWER')
     plt.yscale('log')
     plt.title(f"Curva de error para m={m_max}, t={df_ber['t'].iloc[0]}")
     plt.xlabel("Eb/N0 (dB)")

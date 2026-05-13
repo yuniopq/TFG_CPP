@@ -8,7 +8,7 @@ Este proyecto corresponde a un Trabajo de Fin de Grado centrado en la **implemen
 - Codificación BCH.
 - Decodificación BCH.
 - Simulación de transmisión sobre canal ruidoso.
-- Medición de `BER`, `FER` y tiempos medios de codificación/decodificación.
+- Medición de `BER`, `CWER` y tiempos medios de codificación/decodificación.
 - Exportación de resultados a CSV para su posterior análisis.
 
 ## Estructura
@@ -57,7 +57,7 @@ make run-m4
 
 ## Salida
 
-Durante la ejecución se muestra una tabla con `Eb/N0`, `BER`, `FER` y número de tramas simuladas. Además, se genera un CSV en `results/csv/` con columnas como:
+Durante la ejecución se muestra una tabla con `Eb/N0`, `BER`, `CWER` y número de codewords simulados. Además, se genera un CSV en `results/csv/` con columnas como:
 
 - `m`
 - `t`
@@ -65,8 +65,8 @@ Durante la ejecución se muestra una tabla con `Eb/N0`, `BER`, `FER` y número d
 - `k`
 - `ebno_db`
 - `ber`
-- `fer`
-- `frames`
+- `cwer`
+- `codewords`
 - `avg_enc_us`
 - `avg_dec_us`
 

@@ -2,7 +2,7 @@
 """
 BLOQUE PRINCIPAL: Fijar m y Barrer t
 
-Objetivo: Ver cómo cambia BER, FER y tiempo cuando aumentas la redundancia dentro del mismo campo.
+Objetivo: Ver cómo cambia BER, CWER y tiempo cuando aumentas la redundancia dentro del mismo campo.
 
 Configuración:
 - m=4 (pequeño):   t = 1, 2, 3, 4        → n=15, redundancia 6.7%-26.7%
@@ -75,7 +75,7 @@ def run_main_block():
     print(f"\n📊 Configuración:")
     print(f"   - Rango Eb/N0: {SNR_MIN} a {SNR_MAX} dB (paso {SNR_STEP} dB)")
     print(f"   - Total de escenarios: {len(ESCENARIOS)}")
-    print(f"   - Objetivo: Analizar BER, FER y tiempo con redundancia creciente")
+    print(f"   - Objetivo: Analizar BER, CWER y tiempo con redundancia creciente")
     
     print("\n" + "=" * 80)
     print("EJECUTANDO ESCENARIOS")

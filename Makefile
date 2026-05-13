@@ -55,10 +55,10 @@ run: all
 	@echo "$(CYAN)🚀 Iniciando Simulación BCH...$(RESET)"
 	@./$(TARGET) $(M) $(T) $(MIN) $(MAX) $(STEP) $(FILE)
 
-# Limpieza total incluyendo resultados
+# Limpieza de compilación sin borrar resultados generados
 clean:
-	@echo "$(CYAN)🧹 Limpiando archivos temporales y resultados...$(RESET)"
-	@rm -rf $(BUILD_DIR) $(TARGET) $(RES_DIR)
+	@echo "$(CYAN)🧹 Limpiando archivos temporales...$(RESET)"
+	@rm -rf $(BUILD_DIR) $(TARGET)
 	@echo "$(GREEN)Done.$(RESET)"
 
 help:
@@ -69,7 +69,7 @@ help:
 	@echo "$(GOLD)make run$(RESET)            - Ejecuta con M=7 T=10"
 	@echo "$(GOLD)make run M=4 T=2$(RESET)    - Ejecuta BCH(15,7)"
 	@echo "$(GOLD)make run FILE=img.bmp$(RESET) - Procesa un archivo real"
-	@echo "$(GOLD)make clean$(RESET)          - Borra todo (build y resultados)"
+	@echo "$(GOLD)make clean$(RESET)          - Borra solo build y ejecutable"
 	@echo "$(CYAN)-----------------------------------------$(RESET)"
 
 -include $(DEPS)
