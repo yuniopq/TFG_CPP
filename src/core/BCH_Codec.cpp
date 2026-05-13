@@ -234,12 +234,15 @@ Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t> synd) {
 
     for (int i = 1; i <= 2 * t; i++) {
         // 1. Calcular la discrepancia d
-        uint16_t d = synd[i];
+        // uint16_t d = synd[i];
         // for (int j = 1; j <= L; j++) {
         //     if (j < (int)C.size()) {
         //         d = gf.add(d, gf.multiply(C[j], synd[i - j]));
         //     }
         // }
+        // Dentro del bucle de i = 1 a 2*t
+        uint16_t d = synd[i];
+        // Usamos el tamaño real del vector C, que debe representar el polinomio actual
         int max_j = std::min(L, (int)C.size() - 1);
         for (int j = 1; j <= max_j; j++) {
             d = gf.add(d, gf.multiply(C[j], synd[i - j]));
@@ -375,7 +378,7 @@ bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16
     int rootsFound = 0;
     for (int i = 0; i < n; i++) {
         uint16_t sum = 0;
-        for (int j = 0; j <= L and rootsFound < L; j++) {
+        for (int j = 0; j <= L; j++) {
             sum = gf.add(sum, reg[j]);
         }
 
@@ -385,7 +388,7 @@ bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16
         }
 
         // Actualizar registros para la siguiente iteración
-        for (int j = 0; j <= L and rootsFound < L; j++) {
+        for (int j = 0; j <= L; j++) {
             reg[j] = gf.multiply(reg[j], factors[j]);
         }
     }
