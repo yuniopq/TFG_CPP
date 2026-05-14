@@ -4,11 +4,6 @@ MAIN BLOCK: Fix m and sweep t
 
 Goal: See how BER, CWER, and time change as redundancy increases within the same field.
 
-Configuration:
-- m=4 (small):   t = 1, 2, 3, 4        → n=15, redundancy 6.7%-26.7%
-- m=7 (medium):  t = 2, 5, 10, 15      → n=127, redundancy 11%-88%
-- m=15 (large):  t = 50, 100, 200, 300 → n=32767, redundancy 0.23%-0.92%
-
 Eb/N0 range: 0-12 dB (1 dB step)
 """
 
@@ -22,26 +17,42 @@ from pathlib import Path
 # CONFIGURATION: MAIN SCENARIOS
 # =============================================================================
 
-ESCENARIOS = [
-    # m = 4 (small): n = 15
-    {"m": 4, "t": 1,   "label": "m=4, t=1   (6.7% redundancy)"},
-    {"m": 4, "t": 2,   "label": "m=4, t=2   (13.3% redundancy)"},
-    {"m": 4, "t": 3,   "label": "m=4, t=3   (20% redundancy)"},
-    {"m": 4, "t": 4,   "label": "m=4, t=4   (26.7% redundancy)"},
-    
-    # m = 7 (medium): n = 127
-    {"m": 7, "t": 2,   "label": "m=7, t=2   (11% redundancy)"},
-    {"m": 7, "t": 5,   "label": "m=7, t=5   (27.6% redundancy)"},
-    {"m": 7, "t": 10,  "label": "m=7, t=10  (55% redundancy)"},
-    {"m": 7, "t": 15,  "label": "m=7, t=15  (88% redundancy)"},
-    
-    # m = 15 (large): n = 32767
-    {"m": 15, "t": 50,   "label": "m=15, t=50   (0.23% redundancy)"},
-    {"m": 15, "t": 100,  "label": "m=15, t=100  (0.46% redundancy)"},
-    {"m": 15, "t": 200,  "label": "m=15, t=200  (0.92% redundancy)"},
-    {"m": 15, "t": 300,  "label": "m=15, t=300  (1.37% redundancy)"},
-]
+# =============================================================================
+# CONFIGURATION: MAIN SCENARIOS (ESCALA POR DÍGITOS)
+# =============================================================================
 
+ESCENARIOS = [
+    # 1 DÍGITO: m=3 (n=7)
+    {"m": 3, "t": 1,   "label": "m=3, t=1   (n=7)"},
+    {"m": 3, "t": 2,   "label": "m=3, t=2   (n=7)"},
+    
+    # 2 DÍGITOS: m=4 (n=15)
+    {"m": 4, "t": 1,   "label": "m=4, t=1   (n=15)"},
+    {"m": 4, "t": 2,   "label": "m=4, t=2   (n=15)"},
+    {"m": 4, "t": 3,   "label": "m=4, t=3   (n=15)"},
+    {"m": 4, "t": 4,   "label": "m=4, t=4   (n=15)"},
+
+    
+    # 3 DÍGITOS: m=7 (n=127)
+    {"m": 7, "t": 2,   "label": "m=7, t=2   (n=127)"},
+    {"m": 7, "t": 5,   "label": "m=7, t=5   (n=127)"},
+    {"m": 7, "t": 10,  "label": "m=7, t=10  (n=127)"},
+    {"m": 7, "t": 20,  "label": "m=7, t=20  (n=127)"},
+
+    
+    # 4 DÍGITOS: m=11 (n=2047)
+    {"m": 11, "t": 15, "label": "m=11, t=15 (n=2047)"},
+    {"m": 11, "t": 30, "label": "m=11, t=30 (n=2047)"},
+    {"m": 11, "t": 60, "label": "m=11, t=60 (n=2047)"},
+    {"m": 11, "t": 120, "label": "m=11, t=120 (n=2047)"},
+
+    
+    # 5 DÍGITOS: m=15 (n=32767)
+    {"m": 15, "t": 50,  "label": "m=15, t=50  (n=32767)"},
+    {"m": 15, "t": 100, "label": "m=15, t=100 (n=32767)"},
+    {"m": 15, "t": 200, "label": "m=15, t=200 (n=32767)"},
+    {"m": 15, "t": 300, "label": "m=15, t=300 (n=32767)"},
+]
 # Eb/N0 sweep configuration
 SNR_MIN  = 0.0
 SNR_MAX  = 12.0
