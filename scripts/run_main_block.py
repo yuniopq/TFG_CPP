@@ -2,7 +2,8 @@
 """
 MAIN BLOCK: Fix m and sweep t
 
-Goal: See how BER, CWER, and time change as redundancy increases within the same field.
+Goal: See how BER, CWER, and time change as redundancy increases within 
+the same field, using a percentage-based approach for t.
 
 Eb/N0 range: 0-12 dB (1 dB step)
 """
@@ -11,47 +12,74 @@ import subprocess
 import os
 import sys
 import time
-from pathlib import Path
 
 # =============================================================================
-# CONFIGURATION: MAIN SCENARIOS
+# CONFIGURATION: DYNAMIC SCENARIOS (20-40-60-80-100%)
 # =============================================================================
+M_VALUES = [3, 4, 7, 11, 15]
+PORCENTAJES = [20, 40, 60, 80, 100]
 
-# =============================================================================
-# CONFIGURATION: MAIN SCENARIOS (ESCALA POR DÍGITOS)
-# =============================================================================
+# Tope térmico/temporal: Evita que m=15 bloquee el portátil durante días.
+# Ajusta este valor si ves que los tiempos son demasiado altos o bajos.
+MAX_T_CAP = 351 
 
+def generar_escenarios_porcentuales(m_valores, porcentajes, max_t):
+    escenarios = []
+    
+    for m in m_valores:
+        n = (2**m) - 1
+        t_max = (2**(m-1)) - 1
+        t_vistos = set() 
+        
+        for p in porcentajes:
+            # 1. Calcular el valor según el porcentaje
+            t_calc = max(1, round(t_max * (p / 100.0)))
+            
+            # 2. Aplicar el límite duro (cap) para proteger la CPU
+            if t_calc > max_t:
+                t_calc = max_t
+                
+            # 3. Forzar a número impar para evitar duplicados ciclotómicos
+            if t_calc % 2 == 0:
+                # Si estamos en el cap máximo y es par, bajamos 1 en lugar de subir
+                # para no saltarnos el límite de seguridad.
+                if t_calc == max_t:
+                    t_calc -= 1
+                else:
+                    t_calc += 1
+                
+            # 4. Asegurar no superar la teoría matemática
+            t_calc = min(t_calc, t_max)
+            
+            # 5. Evitar colisiones en bloques pequeños
+            if t_calc not in t_vistos:
+                t_vistos.add(t_calc)
+                label = f"m={m:2d}, t={t_calc:<5d} ({p:>3}% t_max, n={n})"
+                escenarios.append({
+                    "m": m,
+                    "t": t_calc,
+                    "label": label
+                })
+                
+    return escenarios
+
+# Generamos la lista de escenarios antes de iniciar
+# ESCENARIOS = generar_escenarios_porcentuales(M_VALUES, PORCENTAJES, MAX_T_CAP)
 ESCENARIOS = [
-    # 1 DÍGITO: m=3 (n=7)
-    {"m": 3, "t": 1,   "label": "m=3, t=1   (n=7)"},
-    {"m": 3, "t": 2,   "label": "m=3, t=2   (n=7)"},
-    
-    # 2 DÍGITOS: m=4 (n=15)
-    {"m": 4, "t": 1,   "label": "m=4, t=1   (n=15)"},
-    {"m": 4, "t": 2,   "label": "m=4, t=2   (n=15)"},
-    {"m": 4, "t": 3,   "label": "m=4, t=3   (n=15)"},
-    {"m": 4, "t": 4,   "label": "m=4, t=4   (n=15)"},
+    # --- Tasa Alta (R ~ 80%) ---
+    {"m": 4,  "t": 1,   "label": "m=4,  t=1   (R=73%)"},
+    {"m": 7,  "t": 3,   "label": "m=7,  t=3   (R=83%)"},
+    {"m": 11, "t": 35,  "label": "m=11, t=35  (R=81%)"},
 
-    
-    # 3 DÍGITOS: m=7 (n=127)
-    {"m": 7, "t": 2,   "label": "m=7, t=2   (n=127)"},
-    {"m": 7, "t": 5,   "label": "m=7, t=5   (n=127)"},
-    {"m": 7, "t": 10,  "label": "m=7, t=10  (n=127)"},
-    {"m": 7, "t": 20,  "label": "m=7, t=20  (n=127)"},
+    # --- Tasa Media (R ~ 50%) ---
+    {"m": 4,  "t": 2,   "label": "m=4,  t=2   (R=46%)"},
+    {"m": 7,  "t": 9,   "label": "m=7,  t=9   (R=50%)"},
+    {"m": 11, "t": 93,  "label": "m=11, t=93  (R=50%)"},
 
-    
-    # 4 DÍGITOS: m=11 (n=2047)
-    {"m": 11, "t": 15, "label": "m=11, t=15 (n=2047)"},
-    {"m": 11, "t": 30, "label": "m=11, t=30 (n=2047)"},
-    {"m": 11, "t": 60, "label": "m=11, t=60 (n=2047)"},
-    {"m": 11, "t": 120, "label": "m=11, t=120 (n=2047)"},
-
-    
-    # 5 DÍGITOS: m=15 (n=32767)
-    {"m": 15, "t": 50,  "label": "m=15, t=50  (n=32767)"},
-    {"m": 15, "t": 100, "label": "m=15, t=100 (n=32767)"},
-    {"m": 15, "t": 200, "label": "m=15, t=200 (n=32767)"},
-    {"m": 15, "t": 300, "label": "m=15, t=300 (n=32767)"},
+    # --- Tasa Baja (R ~ 33%) ---
+    {"m": 4,  "t": 3,   "label": "m=4,  t=3   (R=33%)"},
+    {"m": 7,  "t": 14,  "label": "m=7,  t=14  (R=33%)"},
+    {"m": 11, "t": 124, "label": "m=11, t=124 (R=33%)"},
 ]
 # Eb/N0 sweep configuration
 SNR_MIN  = 0.0
@@ -63,9 +91,8 @@ SNR_STEP = 1.0
 # =============================================================================
 
 def run_main_block():
-    # Asegurar que el binario existe
     print("=" * 80)
-    print("MAIN BLOCK: FIX m AND SWEEP t")
+    print("MAIN BLOCK: FIX m AND SWEEP t (PERCENTAGE SCALING)")
     print("=" * 80)
     
     print("\n🔨 Building project...")
@@ -86,7 +113,7 @@ def run_main_block():
     print(f"\n📊 Configuration:")
     print(f"   - Eb/N0 range: {SNR_MIN} to {SNR_MAX} dB ({SNR_STEP} dB step)")
     print(f"   - Total scenarios: {len(ESCENARIOS)}")
-    print(f"   - Goal: Analyze BER, CWER, and time with increasing redundancy")
+    print(f"   - T-Max Cap: {MAX_T_CAP} (Safety limit for simulation times)")
     
     print("\n" + "=" * 80)
     print("RUNNING SCENARIOS")
@@ -102,7 +129,7 @@ def run_main_block():
         
         print(f"\n[{idx}/{len(ESCENARIOS)}] Running: {label}")
         
-        # Construir comando
+        # Construir comando (El binario espera: m t ebno_min ebno_max step)
         comando = [
             "./bch_sim", 
             str(m), str(t), 
@@ -111,10 +138,11 @@ def run_main_block():
         
         sim_start = time.time()
         try:
+            # check=True lanzará CalledProcessError si el binario de C++ falla (return != 0)
             result = subprocess.run(comando, check=True, capture_output=True, text=True)
             sim_time = time.time() - sim_start
             
-            # Look for generated file
+            # Comprobar si el archivo fue generado
             csv_file = f"results/csv/BCH_m{m}_t{t}.csv"
             if os.path.exists(csv_file):
                 file_size = os.path.getsize(csv_file)
@@ -138,7 +166,7 @@ def run_main_block():
     print(f"\nTotal time: {total_time:.2f}s ({total_time/60:.1f} minutes)\n")
     
     for label, status, elapsed in results_summary:
-        print(f"{status} | {label:45s} | {elapsed:>8s}")
+        print(f"{status} | {label:55s} | {elapsed:>8s}")
     
     print("\n" + "=" * 80)
     print("📁 CSV files generated in: results/csv/")
@@ -147,5 +175,6 @@ def run_main_block():
     print("=" * 80)
 
 if __name__ == "__main__":
+    # Aseguramos que el script se ejecuta en su propio directorio
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     run_main_block()
