@@ -19,12 +19,14 @@ SimulationConfig parseArguments(int argc, char* argv[]) {
     int n = (1 << cfg.m) - 1;
     // If we are not in file mode, estimate the number of codewords needed
     if (!cfg.use_file) {
-        // 10^8 bits is a good trade-off between precision and speed
-        long long target_bits = 1000000000; 
+        long long target_bits = 2000000000LL;   // ← Cambia a 2.000 millones de bits
         cfg.max_codewords = target_bits / n;
         
-        // Enforce a minimum number of codewords for very large m
-        if (cfg.max_codewords < 100) cfg.max_codewords = 100; 
+        // Mínimo para no quedar con muy pocos datos
+        if (cfg.max_codewords < 50000) cfg.max_codewords = 50000; 
+        
+        // Tope superior para no eternizarse en m=15 + t alto
+        if (cfg.max_codewords > 2000000) cfg.max_codewords = 2000000;
     }
     return cfg;
 }
