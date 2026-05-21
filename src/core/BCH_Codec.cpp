@@ -226,8 +226,10 @@ std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received,
 // }
 Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
     // Use vectors directly to avoid Polynomial overhead and trim()
-    std::vector<uint16_t> C = {1}; 
-    std::vector<uint16_t> B = {1}; 
+    std::vector<uint16_t> C(2 * t + 2, 0);
+    std::vector<uint16_t> B(2 * t + 2, 0);
+    C[0] = 1;
+    B[0] = 1;
     int L = 0;
     int shift_m = 1;
     uint16_t db = 1; // Discrepancia previa
@@ -255,12 +257,7 @@ Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
             // 2. Update C(x) = C(x) + (d/db) * x^shift_m * B(x)
             uint16_t factor = gf.multiply(d, gf.inverse(db));
             
-            size_t neededSize = B.size() + shift_m;
-            if (C.size() < neededSize) {
-                C.resize(neededSize, 0);
-            }
-
-            for (size_t j = 0; j < B.size(); j++) {
+            for (size_t j = 0; j + shift_m < B.size(); j++) {
                 C[j + shift_m] = gf.add(C[j + shift_m], gf.multiply(factor, B[j]));
             }
 

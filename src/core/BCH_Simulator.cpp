@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <random>
 #include <omp.h>
+#include <filesystem>
 
 using namespace std;
 using namespace std::chrono;
@@ -44,7 +45,6 @@ void BCH_Simulator::run() {
 
         if (cfg.use_file) {
             string out_name = "results/out_EbNo_" + to_string((int)e) + "_" + cfg.input_path;
-            corrected_bits.resize(file_bits.size());
             saveBitsToFile(corrected_bits, out_name);
         }
         
@@ -63,10 +63,13 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
     double rate = (double)k / n;
     double esno_db = ebno_db + 10.0 * log10(rate); 
     
-long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_codeword_errors = 0, codewords = 0;
+    long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_codeword_errors = 0, codewords = 0;
     long long total_enc_time = 0, total_dec_time = 0;
 
-    if (cfg.use_file) out_corrected_bits.clear();
+    if (cfg.use_file) {
+        out_corrected_bits.clear();
+        out_corrected_bits.resize(file_bits.size(), 0);
+    }
     long max_iterations = cfg.use_file ? (file_bits.size() / k) : cfg.max_codewords;
 
     #pragma omp parallel
@@ -79,7 +82,7 @@ long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_codeword_errors =
         #pragma omp for schedule(dynamic) reduction(+:total_bit_errors, total_bit_errors_uncoded, total_enc_time, total_dec_time, codewords)
         for (long iter = 0; iter < max_iterations; ++iter) {
             
-            // Comprobación de parada temprana (mantenemos atomic read solo para esto)
+            // Comprobación de parada temprana 
             if (!cfg.use_file) {
                 long cur_codeword_errors;
                 #pragma omp atomic read
@@ -91,7 +94,7 @@ long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_codeword_errors =
             if (cfg.use_file) {
                 for (int i = 0; i < k; i++) message[i] = file_bits[iter * k + i];
             } else {
-                for (int i = 0; i < k; i++) message[i] = (uint16_t)(rng() % 2);
+                for (int i = 0; i < k; i++) message[i] = (rng() % 2);
             }
 
             auto t_enc_start = high_resolution_clock::now();
@@ -106,8 +109,10 @@ long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_codeword_errors =
             auto dec_us = duration_cast<microseconds>(high_resolution_clock::now() - t_dec_start).count();
             
             if (cfg.use_file) {
-                #pragma omp critical
-                out_corrected_bits.insert(out_corrected_bits.end(), decoded.begin(), decoded.end());
+                size_t base_index = iter * k;
+                for (size_t i = 0; i < decoded.size(); ++i) {
+                    out_corrected_bits[base_index + i] = decoded[i];
+                }
             }
 
             vector<uint16_t> noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
@@ -179,10 +184,16 @@ void BCH_Simulator::exportCSV(int n, int k) {
 }
 
 std::vector<uint16_t> BCH_Simulator::readFileToBits(const std::string& path) {
+
+    auto size = std::filesystem::file_size(path);
+
     std::ifstream file(path, std::ios::binary);
-    std::vector<uint16_t> bits;
-    char byte;
     if (!file) throw std::runtime_error("Could not open file: " + path);
+
+    std::vector<uint16_t> bits;
+    bits.reserve(size * 8);
+
+    char byte;
     while(file.get(byte))
         for(int i = 0; i < 8; i++)
             bits.push_back(byte & (1 << i)? 1 : 0);
