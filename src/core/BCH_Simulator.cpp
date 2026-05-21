@@ -63,7 +63,7 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
     double rate = (double)k / n;
     double esno_db = ebno_db + 10.0 * log10(rate); 
     
-    long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_codeword_errors = 0, codewords = 0;
+long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_codeword_errors = 0, codewords = 0;
     long long total_enc_time = 0, total_dec_time = 0;
 
     if (cfg.use_file) out_corrected_bits.clear();
@@ -75,8 +75,11 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
         BCH_Codec local_bch = bch;
         Channel local_channel = channel;
 
-        #pragma omp for schedule(dynamic)
+        // Metemos casi todos los contadores en la cláusula reduction
+        #pragma omp for schedule(dynamic) reduction(+:total_bit_errors, total_bit_errors_uncoded, total_enc_time, total_dec_time, codewords)
         for (long iter = 0; iter < max_iterations; ++iter) {
+            
+            // Comprobación de parada temprana (mantenemos atomic read solo para esto)
             if (!cfg.use_file) {
                 long cur_codeword_errors;
                 #pragma omp atomic read
@@ -101,7 +104,7 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
             vector<uint16_t> decoded;
             bool success = local_bch.decode(noisy, decoded);
             auto dec_us = duration_cast<microseconds>(high_resolution_clock::now() - t_dec_start).count();
-
+            
             if (cfg.use_file) {
                 #pragma omp critical
                 out_corrected_bits.insert(out_corrected_bits.end(), decoded.begin(), decoded.end());
@@ -115,20 +118,17 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
                 if (message[i] != decoded[i]) bit_errors_in_codeword++;
             }
 
+            // Actualización de errores
             if (!success || bit_errors_in_codeword > 0) {
                 #pragma omp atomic
                 total_codeword_errors++;
-                #pragma omp atomic
+                
                 total_bit_errors += bit_errors_in_codeword;
             }
 
-            #pragma omp atomic
             total_bit_errors_uncoded += bit_errors_uncoded_in_codeword;
-            #pragma omp atomic
             total_enc_time += enc_us;
-            #pragma omp atomic
             total_dec_time += dec_us;
-            #pragma omp atomic
             codewords++;
         }
     }
