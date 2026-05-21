@@ -1,0 +1,161 @@
+\chapter{Resultados y Análisis}
+\label{cap:resultados}
+
+En este capítulo se presentan y analizan los resultados obtenidos con el simulador BCH desarrollado. Se examina el rendimiento del código en la corrección de errores (BER y CWER) y se evalúa la eficiencia computacional, siguiendo dos enfoques complementarios.
+
+\section{Metodología Experimental}
+
+Para evaluar el rendimiento, se ha implementado un entorno de simulación basado en el método de Montecarlo, el cual sigue un flujo de: generación de información, codificación, simulación del canal ruidoso y decodificación.
+
+Se han aplicado los siguientes criterios para garantizar la validez estadística de las curvas de rendimiento obtenidas:
+\begin{itemize}
+    \item \textbf{Modelo de canal:} Los bits de cada palabra $c_i \in \{0, 1\}$ se mapean a valores en el rango $s_i \in \{+1, -1\}$ (BPSK). El canal se modela como un canal de ruido blanco gaussiano aditivo (AWGN) con decisión dura. La varianza del ruido generado ($\sigma^2$) se calcula dinámicamente para cada punto de simulación a partir de la relación señal a ruido por símbolo ($E_s/N_0$), la cual se deriva de $E_b/N_0$ mediante la tasa de código $R = k/n$, siguiendo la relación:
+    $$\frac{E_s}{N_0} = \frac{E_b}{N_0} \cdot R$$
+    A partir de este valor, la desviación típica del ruido viene dada por:
+    $$\sigma = \sqrt{\frac{1}{2 \cdot \frac{E_s}{N_0}}}$$
+    
+    \item \textbf{Criterios de parada:} Con el objetivo de evitar estimaciones imprecisas en regiones de alta relación señal a ruido (donde los eventos de error son muy poco probables), el simulador incorpora un doble criterio de parada para cada punto de $E_b/N_0$:
+    \begin{enumerate}
+        \item Se define un volumen objetivo de procesamiento de hasta $2 \times 10^9$ bits de información para estimar de forma fiable tasas de error extremadamente bajas.
+        \item Para optimizar el tiempo de cómputo, el número total de palabras de código a simular para cada punto de $E_b/N_0$ se calcula como $\text{max\_codewords} = \text{target\_bits} / n$. Este valor se encuentra acotado inferiormente en 50.000 bloques (para garantizar una muestra mínima en códigos cortos con valores de $m$ bajos) y superiormente en 2.000.000 de bloques (para mitigar el impacto del crecimiento exponencial del tiempo de cómputo en configuraciones con $m=15$ y alta capacidad correctora $t$).
+        \item Se exige un umbral mínimo de 100 palabras de código erróneas para dar por concluida la evaluación de un punto específico de la curva. Si se alcanza dicho umbral de errores antes de agotar el máximo de bloques configurado, el punto se da por finalizado. Por el contrario, si la CWER desciende a 0 de forma absoluta en un punto determinado, la ejecución de la curva se interrumpe al alcanzarse el límite de corrección del sistema.
+    \end{enumerate}
+
+    \item \textbf{Entorno de ejecución y paralelización:} Debido a la alta carga computacional del procesamiento de miles de millones de bits, el núcleo del simulador se ha paralelizado mediante OpenMP utilizando \textit{dynamic schedule}, lo que permite distribuir la ejecución de los bucles de Montecarlo de manera equilibrada entre los hilos del procesador, aislando los generadores de números aleatorios y las configuraciones del codec de manera local para cada hilo con el fin de evitar condiciones de carrera.
+\end{itemize}
+
+\section{Impacto de la capacidad de corrección $t$ para un valor de $m$ fijo}
+
+En esta sección se analiza el comportamiento del código BCH cuando se mantiene fija la longitud del bloque y se varía su capacidad de corrección de errores ($t$). Se ha seleccionado el cuerpo de grado $m = 7$, que corresponde a un Cuerpo de Galois $GF(2^7)$ y una longitud de bloque fija de $n = 2^7 - 1 = 127$ bits.
+
+Se han evaluado las configuraciones $t \in \{1, 3, 7, 15\}$. La Tabla \ref{tab:parametros_m7} muestra los parámetros principales de cada código, incluida su tasa ($R = k/n$).
+
+\begin{table}[h!]
+\centering
+\caption{Parámetros de los códigos BCH para $m=7$ ($n=127$).}
+\label{tab:parametros_m7}
+\begin{tabular}{cccc}
+\hline
+\textbf{Capacidad ($t$)} & \textbf{Dimensión ($k$)} & \textbf{Redundancia} & \textbf{Tasa ($R$)} \\ \hline
+1 & 120 & 7 & 0,945 \\
+3 & 106 & 21 & 0,835 \\
+7 & 78 & 49 & 0,614 \\
+15 & 22 & 105 & 0,173 \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{../graficos/grafica_bch_m7.pdf}
+    \caption{Estudio comparativo para $m=7$: Tasa de Error de Bit (BER, izquierda) y Tasa de Error de Palabra (CWER, derecha) para $t \in \{1, 3, 7, 15\}$.}
+    \label{fig:rendimiento_m7}
+\end{figure}
+
+A partir de los resultados mostrados en la Figura \ref{fig:rendimiento_m7}, se pueden identificar tres comportamientos principales:
+
+\subsection{Saturación del decodificador en entornos de alto ruido}
+
+En condiciones de ruido elevado (aproximadamente entre 0 y 3 dB), se observa un comportamiento contraintuitivo: el código con mayor capacidad teórica de corrección ($t=15$) presenta la peor tasa de error de bit (BER). 
+
+Esto ocurre porque su baja tasa de código ($R = 0,173$) obliga al canal a introducir un volumen mucho mayor de errores para mantener la misma energía por bit de información ($E_b/N_0$). Cuando el número de errores supera la capacidad de corrección, el algoritmo de Berlekamp-Massey genera un polinomio localizador incorrecto. El decodificador intenta entonces corregir posiciones erróneas, lo que añade más errores al bloque. Como consecuencia, la tasa de error de palabra (CWER) se acerca a 1 y la BER llega a ser incluso superior a la del canal sin codificar.
+
+\subsection{Efecto umbral y coste de la redundancia}
+
+A partir de unos 4 dB, las curvas muestran el típico «efecto umbral» de la decodificación algebraica con decisión dura. Sin embargo, un mayor valor de $t$ no siempre implica un mejor rendimiento.
+
+La configuración $t=7$ ofrece el mejor comportamiento global: presenta la caída más rápida de la BER y desplaza el punto de convergencia hacia valores más bajos de $E_b/N_0$. Por el contrario, el código con $t=15$ mejora de forma más lenta y su curva está desplazada hacia la derecha respecto a $t=3$ y $t=7$.
+
+Este resultado pone de manifiesto la \textbf{penalización por la tasa de código}. Aunque $t=15$ tiene mayor capacidad correctora, su elevada redundancia hace que el canal sea mucho más hostil, superando con frecuencia la capacidad real del decodificador.
+
+\subsection{Diferencia entre BER y CWER}
+
+La comparación de ambas gráficas muestra que la tasa de error de palabra (CWER) siempre desciende más lentamente que la tasa de error de bit (BER). Esto es lógico, ya que la CWER considera que un bloque completo ha fallado aunque solo quede un único bit erróneo, mientras que la BER mide el promedio de bits erróneos sobre el total de bits transmitidos.
+
+\subsection{Conclusión}
+
+Los resultados demuestran que el rendimiento del código no mejora de forma monótona al aumentar la capacidad de corrección $t$. Para $m=7$, existe un punto de equilibrio óptimo en torno a $t=7$, que ofrece una buena protección sin incurrir en la fuerte penalización que sufre $t=15$, ni quedarse corto como ocurre con $t=1$ y $t=3$.
+
+Este análisis confirma que el diseño de un códec BCH eficaz requiere equilibrar adecuadamente la distancia de corrección con la tasa de código y la penalización energética asociada.
+
+\section{Comparación de rendimiento entre códigos con tasa de código similar}
+
+En esta sección se aborda la evaluación del rendimiento aislando el efecto de la penalización por tasa de código (\textit{code rate penalty}). Al comparar configuraciones con diferentes grados de extensión ($m$) pero que comparten una tasa de código ($R = k/n$) equivalente, la varianza del ruido en el canal físico ($\sigma^2$) se mantiene constante para cada valor de $E_b/N_0$ evaluado. Este diseño experimental permite analizar de forma directa el impacto de la longitud del bloque ($n$) y de la capacidad correctora ($t$) sobre la mitigación de errores.
+
+A partir de los datos obtenidos, se han estructurado tres escenarios de evaluación (tasa alta, media y baja) basados en los grados de extensión $m \in \{5, 7, 11\}$, cuyos parámetros constructivos se detallan en la Tabla \ref{tab:tasas_similares}.
+
+\begin{table}[h!]
+\centering
+\caption{Agrupación simétrica de códigos BCH bajo criterios de tasa de código similar.}
+\label{tab:tasas_similares}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{cccccc}
+\hline
+\textbf{Escenario} & \textbf{Grado ($m$)} & \textbf{Bloque ($n$)} & \textbf{Capacidad ($t$)} & \textbf{Información ($k$)} & \textbf{Tasa ($R$)} \\ \hline
+Tasa Alta          & 5                    & 31                    & 1                        & 26                         & 0,838               \\
+($R \approx 0,82$) & 7                    & 127                   & 3                        & 106                        & 0,835               \\
+                   & 11                   & 2047                  & 35                       & 1662                       & 0,812               \\ \hline
+Tasa Media         & 5                    & 31                    & 3                        & 16                         & 0,516               \\
+($R \approx 0,50$) & 7                    & 127                   & 9                        & 64                         & 0,504               \\
+                   & 11                   & 2047                  & 93                       & 1024                       & 0,500               \\ \hline
+Tasa Baja          & 5                    & 31                    & 5                        & 11                         & 0,355               \\
+($R \approx 0,34$) & 7                    & 127                   & 14                       & 43                         & 0,338               \\
+                   & 11                   & 2047                  & 124                      & 683                        & 0,334               \\ \hline
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Análisis del rendimiento en función de la longitud de bloque}
+
+El primer enfoque de este estudio se presenta en la Figura \ref{fig:tasas_similares_grafica}, donde las curvas de rendimiento se agrupan manteniendo una tasa de código similar en cada gráfica. De este modo, es posible observar la influencia intrínseca de la longitud del bloque sobre el comportamiento del sistema frente al ruido.
+
+A partir de los resultados experimentales, se identifican dos tendencias fundamentales comunes a los tres escenarios evaluados:
+
+\begin{itemize}
+
+    \item \textbf{Efecto umbral y caída en cascada (\textit{waterfall}) en bloques largos:}  
+    En todos los niveles de tasa de código, las configuraciones con bloques de mayor longitud ($m=11$) exhiben una pendiente de caída de la BER considerablemente más pronunciada. Aunque en regímenes de ruido intenso (valores bajos de $E_b/N_0$) su rendimiento es similar o ligeramente inferior al de los bloques cortos debido a la propagación de errores en ráfaga, una vez se supera un determinado umbral de relación señal-ruido, la BER disminuye drásticamente. Esto confirma que los códigos largos aprovechan con mayor eficiencia la redundancia conforme mejora el canal.
+
+    \item \textbf{Robustez inicial y ganancia progresiva en bloques cortos:}  
+    Por el contrario, las configuraciones cortas ($m=5$) muestran un comportamiento más lineal y estable en escenarios de baja relación señal-ruido, degradándose de forma menos abrupta. Sin embargo, al carecer de la pronunciada pendiente de caída característica de los códigos de gran longitud, estas configuraciones cortas requieren valores de $E_b/N_0$ notablemente más altos para alcanzar tasas de error muy bajas (por debajo de $10^{-4}$).
+
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{../graficos/grafica_tasas_similares.pdf} 
+    \caption{Estudio comparativo de la BER para agrupaciones de tasa similar: escenarios de tasa alta (izquierda), media (centro) y baja (derecha).}
+    \label{fig:tasas_similares_grafica}
+\end{figure}
+
+\subsection{Análisis de sensibilidad según la capacidad correctora}
+
+Para complementar el estudio previo, la Figura \ref{fig:correlacion_tasas} agrupa las curvas de rendimiento fijando el grado de extensión $m$ en cada subgráfica. Este enfoque permite aislar el impacto que produce el incremento de la capacidad correctora ($t$) —y la consecuente reducción de la tasa de código ($R$)— dentro de un mismo tamaño de bloque.
+
+Los resultados experimentales demuestran que añadir redundancia no produce el mismo efecto en todos los horizontes de longitud de código:
+
+\begin{itemize}
+
+    \item \textbf{Bloques cortos ($m=5$):}  
+    En este régimen, las tres configuraciones presentan un comportamiento prácticamente idéntico en la zona de relación señal-ruido baja y media (entre 0 y 6 dB), mostrando curvas que se solapan casi por completo. Esto evidencia que, para bloques tan cortos, incrementar la capacidad correctora de $t=1$ a $t=5$ apenas aporta una ganancia perceptible en la BER. Es a partir de los 6 dB donde la configuración de alta tasa ($t=1$, curva azul) comienza a degradarse y a distanciarse negativamente de las otras dos opciones. Por su parte, las curvas de tasa media ($t=3$) y baja ($t=5$) se mantienen pegadas en todo el recorrido; por tanto, la configuración intermedia ($t=3$) resulta la más eficiente a efectos prácticos, ya que logra el mismo límite de error que la opción con máxima redundancia pero sin penalizar la velocidad de transmisión de información útil.
+
+    \item \textbf{Bloques intermedios ($m=7$):}  
+    Aquí emerge un comportamiento no lineal respecto a la redundancia. La configuración de tasa media ($t=9$, curva naranja) ofrece el rendimiento óptimo del panel, exhibiendo la caída de BER más rápida. Por el contrario, saturar el bloque con mayor capacidad correctora ($t=14$, curva verde) resulta contraproducente: presenta el peor desempeño de la zona con ruido intenso (hasta los $6 \text{ dB}$) debido a la severa penalización de la tasa de código, y solo iguala a la configuración intermedia en el extremo de alta relación señal-ruido.
+
+    \item \textbf{Bloques largos ($m=11$):}  
+    Para códigos de gran longitud, el impacto de la penalización por tasa de código en entornos hostiles es muy evidente. En la zona de baja relación señal-ruido (de 0 a 4 dB), la configuración con máxima redundancia ($t=124$, curva verde) es superada de forma clara por las tasas media y alta, posicionándose como la opción con peor rendimiento. No obstante, en el intervalo entre los 4 y los 5 dB, esta tendencia cambia de manera drástica: la curva verde experimenta una caída en cascada vertical e instantánea. Al venir desde una zona de errores más elevada, protagoniza el descenso más significativo del panel, logrando que la BER caiga por debajo de $10^{-6}$ y converja en el límite de error cero en el mismo punto que las demás configuraciones en cuanto el canal empieza a despejarse.    
+    
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{../graficos/grafica_correlacion_tasas.pdf} 
+    \caption{Estudio de sensibilidad de la tasa de código agrupado por grado de extensión: $m=5$ (izquierda), $m=7$ (centro) y $m=11$ (derecha).}
+    \label{fig:correlacion_tasas}
+\end{figure}
+
+
+\subsection{Discusión global y criterios de diseño}
+
+Los resultados obtenidos en los diferentes escenarios evidencian que el beneficio de incrementar la redundancia está condicionado por la longitud del bloque del código. En estructuras de bloques cortos ($m=5$), las curvas se solapan y añadir más paridad no aporta una ganancia apreciable frente al ruido. En cambio, en bloques intermedios ($m=7$) y largos ($m=11$), un exceso de bits de paridad penaliza severamente el rendimiento en canales degradados, requiriendo superar un umbral crítico de relación señal-ruido para activar su potencial de corrección en cascada.
+
+En consecuencia, las simulaciones certifican la inexistencia de una solución universal y permiten definir criterios de diseño claros: si el sistema opera con restricciones de tamaño de bloque corto, la configuración de tasa media representa el compromiso óptimo, al igualar el rendimiento de la tasa baja sin penalizar la velocidad de transmisión. Por el contrario, si se implementan bloques largos en canales donde se garantiza superar los 5 dB, las configuraciones de alta tasa son las más eficientes, ya que logran la convergencia a error cero en el mismo umbral que las demás pero maximizando la tasa de transferencia de datos útiles.

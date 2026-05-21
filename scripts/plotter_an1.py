@@ -1,120 +1,62 @@
 import os
-import glob
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
 
-# =============================================================================
-# CONFIGURACIÓN
-# =============================================================================
-CARPETA_CSV = "results/csv"  # Cambia esto si tu carpeta se llama "resultado/csv"
-CARPETA_GRAFICAS = "results/plot"
+# Definir rutas base para que funcione desde la raíz del proyecto
+input_dir = 'results/csv'
+output_dir = 'results'
 
-def cargar_y_limpiar_datos(carpeta):
-    # 1. Buscar todos los archivos CSV en la carpeta
-    archivos_csv = glob.glob(os.path.join(carpeta, "*.csv"))
-    
-    if not archivos_csv:
-        print(f"❌ No se encontraron archivos .csv en la ruta: {carpeta}")
-        return None
-        
-    print(f"📂 Se han encontrado {len(archivos_csv)} archivos CSV. Leyendo...")
-    
-    dfs = []
-    for archivo in archivos_csv:
-        try:
-            df = pd.read_csv(archivo)
-            
-            # Unificar nombres de columnas (algunos tienen fer/frames en lugar de cwer/codewords)
-            df = df.rename(columns={'fer': 'cwer', 'frames': 'codewords'})
-            dfs.append(df)
-        except Exception as e:
-            print(f"⚠️ Error leyendo {archivo}: {e}")
-            
-    # 2. Unir todo en un solo DataFrame
-    df_total = pd.concat(dfs, ignore_index=True)
-    
-    # 3. Forzar a que todo sea numérico (esto elimina silenciosamente filas de texto/encabezados basura)
-    df_total = df_total.apply(pd.to_numeric, errors='coerce').dropna()
-    
-    return df_total
+selected_t = [1, 3, 7, 15]
 
-def generar_graficas_ber(df):
-    ruta_ber = os.path.join(CARPETA_GRAFICAS, "BER")
-    os.makedirs(ruta_ber, exist_ok=True)
-    
-    m_values = sorted(df['m'].unique())
-    
-    for m in m_values:
-        df_m = df[df['m'] == m]
-        t_values = sorted(df_m['t'].unique())
-        n = int(df_m['n'].iloc[0])
-        
-        plt.figure(figsize=(10, 7))
-        
-        # Plotear la curva sin codificar (tomamos la primera, ya que es igual para todas)
-        df_uncoded = df_m[df_m['t'] == t_values[0]].sort_values('ebno_db')
-        plt.plot(df_uncoded['ebno_db'], df_uncoded['ber_uncoded'], 
-                 marker='X', color='black', linestyle='--', linewidth=2, label='Sin codificar (Uncoded)')
+# Crear figura panorámica (BER a la izquierda, CWER a la derecha)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
 
-        # Plotear una curva por cada valor de t
-        for t in t_values:
-            df_t = df_m[df_m['t'] == t].sort_values('ebno_db')
-            k = int(df_t['k'].iloc[0])
-            tasa = k / n
-            plt.plot(df_t['ebno_db'], df_t['ber'], marker='o', 
-                     label=f't={int(t)} (k={k}, R={tasa:.4f})')
+colors = {1: '#1f77b4', 3: '#ff770f', 7: '#d62728', 15: '#8c564b'}
+markers = {1: 'o', 3: 's', 7: '^', 15: 'd'}
 
-        plt.yscale('log')
-        plt.ylim(bottom=1e-8, top=1)
-        plt.xlim(left=0, right=df_m['ebno_db'].max())
-        
-        plt.title(f"Rendimiento BER - Código BCH con m={int(m)} (n={n})", fontsize=14, fontweight='bold')
-        plt.xlabel("Eb/N0 (dB)", fontsize=12)
-        plt.ylabel("Tasa de Error de Bit (BER)", fontsize=12)
-        plt.grid(True, which="both", ls="--", alpha=0.6)
-        plt.legend(loc='lower left', fontsize=10)
-        
-        archivo_salida = os.path.join(ruta_ber, f"Curva_BER_m{int(m)}.png")
-        plt.savefig(archivo_salida, dpi=300, bbox_inches='tight')
-        plt.close()
-        print(f"   ✅ Gráfica BER generada: {archivo_salida}")
+# 1. Cargar datos de referencia sin codificar usando la ruta correcta
+uncoded_path = os.path.join(input_dir, 'BCH_m7_t1.csv')
+if os.path.exists(uncoded_path):
+    df_uncoded = pd.read_csv(uncoded_path)
+    ax1.semilogy(df_uncoded['ebno_db'], df_uncoded['ber_uncoded'], 'k--', label='Sin codificar (Uncoded)', linewidth=2)
 
-def generar_graficas_tiempo(df):
-    ruta_tiempos = os.path.join(CARPETA_GRAFICAS, "Tiempos")
-    os.makedirs(ruta_tiempos, exist_ok=True)
+# 2. Iterar y graficar los códecs seleccionados
+for t in selected_t:
+    file_path = os.path.join(input_dir, f'BCH_m7_t{t}.csv')
+    if not os.path.exists(file_path):
+        print(f"[!] Archivo no encontrado: {file_path}")
+        continue
+        
+    df = pd.read_csv(file_path)
     
-    m_values = sorted(df['m'].unique())
+    # Panel Izquierdo: BER
+    ax1.semilogy(df['ebno_db'], df['ber'], color=colors[t], linestyle='-', marker=markers[t], markersize=6, label=f'BCH $t={t}$')
     
-    for m in m_values:
-        df_m = df[df['m'] == m]
-        t_values = sorted(df_m['t'].unique())
-        n = int(df_m['n'].iloc[0])
-        
-        # Agrupar por t y sacar el tiempo promedio (o el máximo si quieres ver el peor caso)
-        tiempos = df_m.groupby('t')['avg_dec_us'].mean()
-        
-        plt.figure(figsize=(9, 5))
-        plt.plot(tiempos.index, tiempos.values, marker='s', color='darkred', linestyle='-', linewidth=2)
-        
-        plt.title(f"Complejidad de Decodificación - m={int(m)} (n={n})", fontsize=14, fontweight='bold')
-        plt.xlabel("Capacidad de Corrección Teórica (t)", fontsize=12)
-        plt.ylabel("Tiempo Promedio Decodificación (µs)", fontsize=12)
-        plt.grid(True, ls="--", alpha=0.6)
-        
-        archivo_salida = os.path.join(ruta_tiempos, f"Tiempos_Dec_m{int(m)}.png")
-        plt.savefig(archivo_salida, dpi=300, bbox_inches='tight')
-        plt.close()
-        print(f"   ✅ Gráfica Tiempos generada: {archivo_salida}")
+    # Panel Derecho: CWER
+    ax2.semilogy(df['ebno_db'], df['cwer'], color=colors[t], linestyle='-', marker=markers[t], markersize=6, label=f'BCH $t={t}$')
 
-if __name__ == "__main__":
-    print("Iniciando análisis de resultados...\n")
-    df_global = cargar_y_limpiar_datos(CARPETA_CSV)
-    
-    if df_global is not None:
-        print("\n📊 Generando gráficas de Tasa de Error (BER)...")
-        generar_graficas_ber(df_global)
-        
-        print("\n⏱️ Generando gráficas de Tiempos de Computación...")
-        generar_graficas_tiempo(df_global)
-        
-        print("\n🎉 ¡Análisis completado! Revisa la carpeta results/plot/")
+# Configuración Panel BER (Izquierda)
+ax1.set_xlabel('$E_b/N_0$ (dB)', fontsize=12)
+ax1.set_ylabel('Bit Error Rate (BER)', fontsize=12)
+ax1.set_title('Tasa de Error de Bit (BER) para $m=7$', fontsize=13, fontweight='bold')
+ax1.grid(True, which='both', linestyle='--', alpha=0.5)
+ax1.legend(loc='lower left', fontsize=11)
+ax1.set_ylim([1e-6, 1.2])
+ax1.set_xlim([0, 10])
+
+# Configuración Panel CWER (Derecha)
+ax2.set_xlabel('$E_b/N_0$ (dB)', fontsize=12)
+ax2.set_ylabel('Codeword Error Rate (CWER)', fontsize=12)
+ax2.set_title('Tasa de Error de Palabra (CWER) para $m=7$', fontsize=13, fontweight='bold')
+ax2.grid(True, which='both', linestyle='--', alpha=0.5)
+ax2.legend(loc='lower left', fontsize=11)
+ax2.set_ylim([1e-6, 1.2])
+ax2.set_xlim([0, 10])
+
+plt.tight_layout()
+
+# Guardar los archivos finales en la carpeta results/
+plt.savefig(os.path.join(output_dir, 'grafica_bch_m7_limpia.png'), dpi=300)
+plt.savefig(os.path.join(output_dir, 'grafica_bch_m7_limpia.pdf'), bbox_inches='tight')
+
+print("¡Gráfica panorámica guardada con éxito en la carpeta 'results/'!")

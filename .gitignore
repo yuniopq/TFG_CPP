@@ -1,41 +1,51 @@
-# --- Binarios y Ejecutables ---
-# Ignora el ejecutable principal
+# --- C++: Binarios, Objetos y Ejecutables ---
 bch_sim
 bch_sim.exe
 *.out
 *.app
-
-# --- Objetos y Librerías ---
-# Ignora los archivos .o generados por el Makefile
+*.exe
 *.o
+*.obj
 *.a
 *.so
 *.lib
 
-# --- Directorio de Build ---
-# Ignora todo lo que metas en la carpeta build para limpiar el proyecto
+# --- Directorios de Compilación y Entorno ---
 build/
-
-# --- IDEs y Editores ---
-# Ignora la configuración local de VS Code
+.build/
+venv/
 .vscode/
 .history/
-*.swp
-*~
 
-# --- Archivos de Sistema ---
-.DS_Store
-Thumbs.db
+# --- LaTeX: Archivos Auxiliares e Historial ---
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.toc
+*.lof
+*.lot
+*.out
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*.pdfsync
+*.synctex.gz
+*.synctex(busy)
 
-# --- Python (Scripts de simulación) ---
-# Si usas python para los plots, ignoramos su basura
+# --- Python: Caché y Simulaciones ---
 __pycache__/
 *.py[cod]
 *$py.class
-venv/
 
-# --- Resultados de Simulación ---
+# --- Datos, Resultados y Backups ---
 results/*.csv
 results/*.png
-
 backups/*
+
+# --- Archivos del Sistema Operativo ---
+.DS_Store
+Thumbs.db
+*.swp
+*~

@@ -1,0 +1,207 @@
+\documentclass[a4paper,11pt,oneside]{book}
+
+% --- Paquetes fundamentales ---
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-tabla]{babel} 
+
+% --- Configuración de Márgenes (Ajustado para ETSIIT) ---
+\usepackage[top=3cm, bottom=3cm, left=3.5cm, right=2.5cm, headheight=16pt]{geometry}
+
+% --- Interlineado (Recomendado 1.15 - 1.25) ---
+\usepackage{setspace}
+\setstretch{1.15}
+
+\usepackage{amsmath, amssymb, amsfonts} % FUNDAMENTAL para el TFG de Álgebra
+\usepackage{xspace} % Necesario para los comandos de texto
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows, babel, fit}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% --- Configuración de punto decimal ---
+\decimalpoint
+\usepackage{dcolumn}
+\newcolumntype{.}{D{.}{\esperiod}{-1}}
+\makeatletter
+\addto\shorthandsspanish{\let\esperiod\es@period@code}
+\makeatother
+
+% --- Paquetes gráficos y de formato ---
+\RequirePackage{verbatim}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\graphicspath{{imagenes/}} 
+\usepackage{afterpage}
+\usepackage{longtable}
+\usepackage{colortbl}
+\usepackage[stable]{footmisc}
+\usepackage{url}
+\usepackage{pdfpages}
+\usepackage{listings}
+\usepackage{titlesec}
+\usepackage{titletoc}
+
+% --- Referencias y Enlaces ---
+\usepackage[pdfborder={000}]{hyperref} 
+
+% ********************************************************************
+% Información del Documento
+% ********************************************************************
+\newcommand{\myTitle}{Diseño e Implementación de un Simulador de Códigos BCH para el Análisis de Rendimiento en Canales con Ruido\xspace}
+\newcommand{\myDegree}{Grado en Ingeniería Informática\xspace}
+\newcommand{\myName}{ZhiXiang Zhou Wang\xspace}
+\newcommand{\myProf}{Jesús García Miranda\xspace}
+\newcommand{\myFaculty}{Escuela Técnica Superior de Ingenierías Informática y de Telecomunicación\xspace}
+\newcommand{\myFacultyShort}{E.T.S. de Ingenierías Informática y de Telecomunicación\xspace}
+\newcommand{\myDepartment}{Departamento de Álgebra\xspace}
+\newcommand{\myUni}{\protect{Universidad de Granada}\xspace}
+\newcommand{\myLocation}{Granada\xspace}
+\newcommand{\myTime}{Julio de 2026\xspace}
+
+\hypersetup{
+    pdfauthor = {\myName},
+    pdftitle = {\myTitle},
+    pdfsubject = {Trabajo Fin de Grado - \myDegree},
+    pdfkeywords = {Códigos BCH, Cuerpos de Galois, Simulación, Rendimiento, Python},
+    pdfcreator = {LaTeX},
+    pdfproducer = {pdflatex}
+}
+
+% --- Configuración de Cabeceras (Ajustado para oneside) ---
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\textbf{\thepage}}
+\renewcommand{\chaptermark}[1]{\markboth{\textbf{#1}}{}}
+\renewcommand{\sectionmark}[1]{\markright{\textbf{\thesection. #1}}}
+
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
+
+% --- Definición de Teoremas ---
+\newtheorem{teorema}{Teorema}[chapter]
+\newtheorem{ejemplo}{Ejemplo}[chapter]
+\newtheorem{definicion}{Definición}[chapter]
+
+% --- Configuración de fragmentos de código (Listings) ---
+\definecolor{gray97}{gray}{.97}
+\definecolor{gray75}{gray}{.75}
+\definecolor{gray45}{gray}{.45}
+\definecolor{gray30}{gray}{.94}
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{rgb}{0.6,0,0}
+\definecolor{deepgreen}{rgb}{0,0.5,0}
+
+\lstset{ 
+    frame=single,              % Unificado a recuadro completo para consistencia
+    aboveskip=0.5cm,
+    belowskip=0.5cm,
+    backgroundcolor=\color{gray97},
+    stringstyle=\ttfamily,
+    showstringspaces=false,
+    basicstyle=\scriptsize\ttfamily,
+    commentstyle=\color{gray45},
+    keywordstyle=\bfseries,
+    numbers=left,
+    numbersep=8pt,             % Un poco más de espacio con los números
+    numberstyle=\tiny,
+    breaklines=true,           % Partir líneas automáticamente
+    breakatwhitespace=true,    % Partir preferiblemente en espacios
+    columns=flexible,          % EVITA QUE EL TEXTO SE SALGA A LA DERECHA
+    keepspaces=true,           % Mantiene los espacios del código original sin romper el layout
+    xleftmargin=15pt,          % Mueve todo el bloque a la derecha para que entren los números sin salirse del margen de la ETSIIT
+    framexleftmargin=15pt
+}
+ 
+% ESTILO PYTHON
+\lstdefinestyle{CodigoPython}{
+    language=Python,
+    basicstyle=\scriptsize\ttfamily,
+    otherkeywords={self},             
+    keywordstyle=\color{deepblue}\bfseries,
+    emph={__init__},          
+    emphstyle=\color{deepred}\bfseries,    
+    stringstyle=\color{deepgreen},
+    commentstyle=\color{gray45}\itshape,
+    showspaces=false,
+    showstringspaces=false
+}
+
+% ESTILO C++
+\lstdefinestyle{CodigoCPP}{
+    language=C++,
+    basicstyle=\scriptsize\ttfamily,
+    keywordstyle=\color{deepblue}\bfseries,
+    stringstyle=\color{deepgreen},
+    commentstyle=\color{gray45}\itshape,
+    directivestyle=\color{deepred}\bfseries,
+    morekeywords={uint8_t, uint16_t, uint32_t, size_t},
+    showspaces=false,
+    showstringspaces=false
+}
+
+\lstdefinestyle{Consola}{
+    basicstyle=\scriptsize\bfseries\ttfamily, % Corregido \bf por \bfseries (que es lo correcto en LaTeX actual)
+    backgroundcolor=\color{gray30},
+    numbers=none,
+    xleftmargin=5pt,
+    framexleftmargin=5pt
+}
+\newcommand{\bigrule}{\titlerule[0.5mm]}
+
+% Evitar cabeceras en páginas en blanco
+\makeatletter
+\def\clearpage{%
+  \ifvmode
+    \ifnum \@dbltopnum =\m@ne
+      \ifdim \pagetotal <\topskip
+        \hbox{}
+      \fi
+    \fi
+  \fi
+  \newpage
+  \thispagestyle{empty}
+  \write\m@ne{}
+  \vbox{}
+  \penalty -\@Mi
+}
+\makeatother
+
+% ====================================================================
+% INICIO DEL DOCUMENTO
+% ====================================================================
+\begin{document}
+
+% --- Portadas y Prefacios ---
+\input{portada/portada}
+\input{prefacios/prefacio}
+
+% --- Páginas iniciales (Índices) ---
+\frontmatter
+\tableofcontents
+\listoffigures
+\listoftables
+
+% --- Cuerpo del TFG ---
+\mainmatter
+\setlength{\parskip}{5pt}
+
+% Capítulos
+\input{capitulos/01_Introduccion}
+\input{capitulos/02_Fundamentos} 
+\input{capitulos/03_Diseno}
+\input{capitulos/04_Implementacion}
+\input{capitulos/05_Analisis_Resultados}
+\input{capitulos/06_Conclusiones}
+
+% --- Bibliografía ---
+\backmatter
+\addcontentsline{toc}{chapter}{Bibliografía}
+\bibliographystyle{unsrt} 
+\bibliography{bibliografia/bibliografia}
+
+% --- Apéndices ---
+\appendix
+%\input{apendices/manual_usuario/manual_usuario}
+
+\end{document}

@@ -1,0 +1,881 @@
+\chapter{Implementación}
+\label{cap:implementacion}
+
+En este capítulo se presentan los aspectos más relevantes de la implementación del simulador en C++17.
+
+\section{Implementación del Cuerpo de Galois}
+\label{sec:galois_field}
+
+% (Se omiten los fundamentos matemáticos aquí; ver el capítulo de Fundamentos Matemáticos)
+\subsection{Estructura de Datos}
+
+\subsubsection{Atributos Estáticos}
+
+La clase \texttt{GaloisField} utiliza atributos estáticos para compartir las tablas de precálculo entre todas las instancias del mismo cuerpo:
+
+\begin{lstlisting}[style=CodigoCPP]
+static vector<uint16_t> log_table;      // Tabla de logaritmos
+static vector<uint16_t> exp_table;      // Tabla de exponentes
+static int initialized_m;               // m del ultimo cuerpo inicializado
+\end{lstlisting}
+
+Esta estrategia reduce el consumo de memoria y las operaciones redundantes cuando se crean múltiples instancias del mismo cuerpo.
+
+\subsubsection{Atributos de Instancia}
+
+\begin{lstlisting}[style=CodigoCPP]
+int m;                      // Grado del cuerpo
+int size;                   // Numero de elementos (2^m)
+int primitive_poly;         // Polinomio primitivo
+\end{lstlisting}
+
+\subsection{Inicialización y Precálculo}
+
+El constructor inicializa el cuerpo y genera las tablas de logaritmos y exponentes:
+
+\begin{lstlisting}[style=CodigoCPP]
+GaloisField::GaloisField(int m, int primitive_poly) 
+    : m(m), size(0), primitive_poly(primitive_poly) {
+    if (m < 1 || m > 15) {
+        throw std::invalid_argument("m debe estar entre 1 y 15");
+    }
+    if (primitive_poly <= 0) {
+        throw std::invalid_argument(
+            "El polinomio primitivo debe ser positivo");
+    }
+    
+    size = 1 << m;  // size = 2^m
+
+    // Solo se computa si es un nuevo cuerpo
+    if (initialized_m != m) {
+        log_table.assign(size, 0);
+        exp_table.assign(2 * size, 0);
+
+        int val = 1;
+        for (int i = 0; i < size - 1; i++) {
+            exp_table[i] = val;
+            log_table[val] = i;
+            val <<= 1;
+            if (val & size) val ^= primitive_poly;
+        }
+
+        // Duplicar la tabla de exponentes para evitar modulo
+        for (int i = size - 1; i < (size - 1) * 2; i++) {
+            exp_table[i] = exp_table[i - (size - 1)];
+        }
+        initialized_m = m;
+    }
+}
+\end{lstlisting}
+
+\subsection{Operaciones Implementadas}
+
+\subsubsection{Adición}
+
+\begin{lstlisting}[style=CodigoCPP]
+uint16_t GaloisField::add(uint16_t a, uint16_t b) const {
+    return a ^ b;
+}
+\end{lstlisting}
+
+\noindent
+\textbf{Complejidad}: $O(1)$. La adición es una operación XOR.
+
+\subsubsection{Multiplicación}
+
+\begin{lstlisting}[style=CodigoCPP]
+uint16_t GaloisField::multiply(uint16_t a, uint16_t b) const {
+    assert(a < size && b < size && 
+        "Elemento fuera de rango");
+    if (a == 0 || b == 0) return 0;
+    return exp_table[log_table[a] + log_table[b]];
+}
+\end{lstlisting}
+
+\noindent
+\textbf{Complejidad}: $O(1)$ con tablas.
+
+\noindent
+\textbf{Fundamento Matemático}: Se utiliza la propiedad de logaritmos en cuerpos finitos:
+
+\begin{equation}
+a \cdot b = \alpha^{\log(a)} \cdot \alpha^{\log(b)} = \alpha^{\log(a) + \log(b)}
+\end{equation}
+
+Debido a que la tabla de exponentes se duplica, se evita la operación módulo $2^m - 1$ en cada multiplicación.
+
+\subsubsection{División}
+
+\begin{lstlisting}[style=CodigoCPP]
+uint16_t GaloisField::divide(uint16_t a, uint16_t b) const {
+    assert(a < size && b < size && 
+        "Elemento fuera de rango");
+    assert(b != 0 && "Division por cero");
+    if (a == 0) return 0;
+    return exp_table[log_table[a] - log_table[b] + (size - 1)];
+}
+\end{lstlisting}
+
+\noindent
+\textbf{Complejidad}: $O(1)$.
+
+\noindent
+\textbf{Fundamento Matemático}:
+
+\begin{equation}
+\frac{a}{b} = \alpha^{\log(a) - \log(b)}
+\end{equation}
+
+Se suma $(2^m - 1)$ para garantizar un índice positivo, aprovechando la duplicación: $\alpha^{\log(a) - \log(b) + (2^m - 1)} = \alpha^{\log(a) - \log(b)}$ en $\mathbb{GF}(2^m)$.
+
+\subsubsection{Potencia}
+
+\begin{lstlisting}[style=CodigoCPP]
+uint16_t GaloisField::power(uint16_t a, int e) const {
+    assert(a < size && "Elemento fuera de rango");
+    assert(e >= 0 && "Exponente negativo no soportado");
+    if (a == 0) return 0;
+    if (e == 0) return 1;
+    int exp = log_table[a] * e % (size - 1);
+    return exp_table[exp];
+}
+\end{lstlisting}
+
+\noindent
+\textbf{Complejidad}: $O(1)$.
+
+\noindent
+\textbf{Fundamento Matemático}:
+
+\begin{equation}
+a^e = (\alpha^{\log(a)})^e = \alpha^{e \cdot \log(a) \bmod (2^m - 1)}
+\end{equation}
+
+
+\subsubsection{Inverso Multiplicativo}
+
+\begin{lstlisting}[style=CodigoCPP]
+uint16_t GaloisField::inverse(uint16_t a) const {
+    assert(a < size && "Elemento fuera de rango");
+    assert(a != 0 && "No se puede invertir cero");
+    return exp_table[(size - 1) - log_table[a]];
+}
+\end{lstlisting}
+\noindent
+\textbf{Complejidad}: $O(1)$.
+
+\noindent
+\textbf{Fundamento Matemático}: El inverso multiplicativo de $a = \alpha^{\log(a)}$ es:
+
+\begin{equation}
+a^{-1} = \alpha^{-(log(a))} = \alpha^{(2^m - 1) - \log(a)}
+\end{equation}
+
+garantizando que $a \cdot a^{-1} = \alpha^{2^m - 1} = 1$.
+
+\subsection{Gestión de Memoria y Optimizaciones}
+
+El uso de tablas estáticas proporciona las siguientes ventajas:
+
+\begin{itemize}
+    \item \textbf{Precálculo único}: Si múltiples instancias utilizan el mismo $m$, las tablas se computan solo una vez
+    \item \textbf{Acceso $O(1)$}: Todas las operaciones se reducen a búsquedas en tabla
+    \item \textbf{Validación verificada}: El cuerpo \texttt{initialized\_m} garantiza consistencia
+    \item \textbf{Complejidad espacial}: Para $\mathbb{GF}(2^m)$ aproximadamente $3 \times 2^{m+1}$ bytes. Para $m = 15$ (máximo soportado): $\approx 192$ KB
+\end{itemize}
+
+Para las operaciones aritméticas críticas (multiply, divide, power, inverse), la validación de los operandos se realiza mediante assert. Esta decisión de diseño se fundamenta en el rendimiento: al compilar el simulador en modo NDEBUG, el preprocesador elimina las aserciones, asegurando que no exista ninguna penalización (overhead) en tiempo de ejecución durante las simulaciones intensivas, mientras que mantiene la seguridad durante la fase de desarrollo y depuración.
+\subsection{Ejemplo de Uso}
+
+\begin{lstlisting}[style=CodigoCPP]
+// Crear un cuerpo GF(2^4) con polinomio primitivo 0x13
+GaloisField gf(4, 0x13);
+
+// Operaciones
+uint16_t a = 5;   // 0b0101 en binario
+uint16_t b = 7;   // 0b0111 en binario
+
+uint16_t suma = gf.add(a, b);           // 5 XOR 7 = 2 (0b0010)
+uint16_t producto = gf.multiply(a, b);  // 5 * 7 = 8 (0b1000)
+uint16_t cociente = gf.divide(a, b);    // 5 / 7 = 13 (0b1101)
+uint16_t inverso = gf.inverse(b);       // 7^-1 = 6 (0b0110)
+uint16_t potencia = gf.power(a, 3);     // 5^3 = 10 (0b1010)
+\end{lstlisting}
+
+\section{Implementación de Polinomios}
+\label{sec:polynomial}
+
+\subsection{Estructura de datos}
+
+La clase \texttt{Polynomial} representa polinomios con coeficientes en $\mathbb{GF}(2^m)$ usando:
+
+\begin{lstlisting}[style=CodigoCPP]
+// coef[0] + coef[1]x + coef[2]x^2 + ...
+vector<uint16_t> coef;
+GaloisField gf; // cuerpo asociado
+\end{lstlisting}
+
+\texttt{trim()} mantiene la representación eliminando ceros finales.
+
+\subsection{Constructor y normalización}
+
+\begin{lstlisting}[style=CodigoCPP]
+Polynomial::Polynomial(const GaloisField &galoisField,const vector<uint16_t> &coefficients)
+    : coef(coefficients), gf(galoisField) {
+    trim();
+}
+\end{lstlisting}
+
+\subsection{Operaciones implementadas}
+
+\subsubsection{Acceso y modificación}
+
+\begin{lstlisting}[style=CodigoCPP]
+int Polynomial::getDegree() const { /* devuelve coef.size()-1 o -1 si vacio */ }
+uint16_t Polynomial::getCoef(int degree) const { /* devuelve 0 si fuera de rango */ }
+int Polynomial::setCoef(int degree, uint16_t value) { /* redimensiona y trim */ }
+\end{lstlisting}
+
+\subsubsection{Suma}
+
+Suma coeficiente a coeficiente usando \texttt{gf.add}:
+
+\begin{lstlisting}[style=CodigoCPP]
+Polynomial Polynomial::add(const Polynomial &p2) const {
+    std::vector<uint16_t> result_coef(std::max(coef.size(), p2.coef.size()), 0);
+    for (size_t i = 0; i < result_coef.size(); i++) {
+        uint16_t c1 = (i < coef.size()) ? coef[i] : 0;
+        uint16_t c2 = (i < p2.coef.size()) ? p2.coef[i] : 0;
+        result_coef[i] = gf.add(c1, c2);
+    }
+    return Polynomial(gf, result_coef);
+}
+\end{lstlisting}
+
+\textbf{Complejidad}: $O(n)$ donde $n = \max(\deg(p1),\deg(p2))$.
+
+\subsubsection{Multiplicación}
+
+Multiplicación por el método directo (coste cuadrático):
+
+\begin{lstlisting}[style=CodigoCPP]
+Polynomial Polynomial::multiply(const Polynomial &p2) const{
+    if (coef.empty() || p2.coef.empty()) return Polynomial(gf, {});
+    std::vector<uint16_t> result_coef(coef.size() + p2.coef.size() - 1, 0);
+    for(size_t i = 0; i < coef.size(); i++){
+        for(size_t j=0; j<p2.coef.size(); j++){
+            result_coef[i+j] = gf.add(result_coef[i+j], gf.multiply(coef[i], p2.coef[j]));
+        }
+    }
+    return Polynomial(gf, result_coef);
+}
+\end{lstlisting}
+
+\textbf{Complejidad}: $O(n\cdot m)$ para grados $n,m$.
+
+\subsubsection{Evaluación (Horner)}
+
+\begin{lstlisting}[style=CodigoCPP]
+uint16_t Polynomial::evaluate(uint16_t x) {
+    if (coef.empty()) return 0;
+    if (x == 0) return getCoef(0);
+    uint16_t res = 0;
+    for (int i = getDegree(); i >= 0; i--) {
+        res = gf.add(gf.multiply(res, x), getCoef(i));
+    }
+    return res;
+}
+\end{lstlisting}
+
+\subsubsection{Trim y utilidades}
+
+\begin{lstlisting}[style=CodigoCPP]
+void Polynomial::trim() {
+    while (!coef.empty() && coef.back() == 0) coef.pop_back();
+}
+\end{lstlisting}
+
+\subsection{Decisiones de diseño}
+
+\begin{itemize}
+  \item Algoritmo de multiplicación simple: suficiente para los grados usados en este proyecto; alternativas (Karatsuba) solo si se requiere rendimiento en polinomios grandes.
+  \item Uso de \texttt{uint16\_t} para coeficientes acorde a \texttt{GaloisField} actual ($m\leq15$).
+\end{itemize}
+
+\section{Implementación de PackedBit}
+\label{sec:packedbit}
+
+\subsection{Estructura de datos}
+
+La clase \texttt{PackedBit} empaqueta una secuencia de bits lógicos dentro de un vector de bloques de 64 bits (\texttt{vector<uint64\_t>}). Esta representación reduce el coste de memoria frente a almacenar cada bit como un entero independiente y permite aplicar XOR y desplazamientos a nivel de palabra completa.
+
+En el contexto del codificador BCH, \texttt{PackedBit} se usa para representar tanto el mensaje extendido como el polinomio generador en forma binaria, acelerando la división polinómica por XOR desplazado.
+
+\subsection{Constructor y conversión desde vector}
+
+La construcción parte de un \texttt{std::vector<uint16\_t>} en el que cada entrada se interpreta como un bit lógico. El constructor calcula el número de bloques necesarios, reserva memoria y fija cada bit en la posición correspondiente.
+
+\begin{lstlisting}[style=CodigoCPP]
+PackedBit(const std::vector<uint16_t> &original){
+    bitCount = original.size();
+    size_t blockCount = (bitCount + 63) / 64;
+    data.resize(blockCount, 0);
+    for (size_t i=0; i<bitCount; ++i){
+        if (original[i]){
+            data[ i/64 ] |= (1ULL << (i % 64));
+        }
+    }
+}
+\end{lstlisting}
+
+\subsection{Operaciones implementadas}
+
+\subsubsection{Acceso y modificación de bits}
+
+\begin{lstlisting}[style=CodigoCPP]
+uint16_t get(size_t index) const;
+void set(size_t index, uint16_t value);
+\end{lstlisting}
+
+\texttt{get()} devuelve 0 cuando el índice está fuera de rango, y \texttt{set()} ignora escrituras fuera del tamaño lógico del objeto.
+
+\subsubsection{Conversión a vector}
+
+Para facilitar la interoperabilidad de la estructura \texttt{PackedBit} con otras etapas del simulador (como el modulador o la simulación del canal con ruido), la clase proporciona el método \texttt{toVector()}, el cual expande los bits empaquetados en un \texttt{std::vector<uint16\_t>}.
+
+\begin{lstlisting}[style=CodigoCPP]
+std::vector<uint16_t> toVector(){
+    std::vector<uint16_t> res(bitCount, 0);
+    size_t fullBlocks = bitCount / 64;
+    uint64_t blockData;
+    for(size_t block=0; block<fullBlocks; block++){
+        blockData = data[block];
+        for(size_t offset=0; offset<64; offset++){
+            res[block*64 + offset] = (blockData >> offset) & 1ULL;
+        }
+    }
+    size_t remainingBits = bitCount % 64;
+    if (remainingBits > 0) {
+        uint64_t blockData = data[fullBlocks];
+        for(size_t offset=0; offset<remainingBits; offset++){
+            res[fullBlocks*64 + offset] = (blockData >> offset) & 1ULL;
+        }
+    }
+    return res;
+}
+\end{lstlisting}
+
+\subsubsection{Desplazamiento y XOR combinado}
+
+La operación \texttt{xorShifted()} es la más importante para el codificador BCH, porque permite simular la resta polinómica mediante XOR del generador desplazado.
+
+\begin{lstlisting}[style=CodigoCPP]
+void xorShifted(const PackedBit &gx, size_t shift_bits) {
+    if (shift_bits >= bitCount || gx.data.empty()) return;
+
+    size_t block_shift = shift_bits / 64;
+    size_t bit_shift = shift_bits % 64;
+    uint64_t carry = 0, next_carry = 0;
+    
+    size_t dst;
+    for (size_t i = 0; i < gx.data.size(); ++i) {
+        dst = i + block_shift;
+        if (dst >= data.size()) break;
+
+        uint64_t word = gx.data[i];
+        next_carry = (bit_shift == 0) ? 0 : (word >> (64 - bit_shift));
+        data[dst] ^= (word << bit_shift) | carry;
+        carry = next_carry;
+    }
+
+    dst = gx.data.size() + block_shift;
+    if (carry && dst < data.size()) {
+        data[dst] ^= carry;
+    }
+
+    if (bitCount % 64 != 0 && !data.empty()) {
+        uint64_t keep_mask = (1ULL << (bitCount % 64)) - 1ULL;
+        data.back() &= keep_mask;
+    }
+}
+\end{lstlisting}
+
+\subsection{Decisiones de diseño}
+
+\begin{itemize}
+    \item Se usa \texttt{uint64\_t} como unidad base para aprovechar operaciones de la CPU.
+    \item \texttt{bitCount} conserva el tamaño lógico original del conjunto de bits.
+    \item Se prioriza la velocidad de operaciones binarias frente a una abstracción más general.
+    \item La versión optimizada de \texttt{toVector()} reduce el coste de conversión cuando el codificador necesita recuperar los bits residuales.
+\end{itemize}
+
+\subsection{Relación con BCH\_Codec}
+
+\texttt{PackedBit} no es solo una estructura auxiliar, sino la representación binaria que permite que \texttt{BCH\_Codec} realice la división del mensaje por el polinomio generador mediante desplazamientos y XOR sobre bloques de 64 bits. En otras palabras, convierte una operación algebraica sobre polinomios en una secuencia de operaciones bit a bit mucho más eficiente.
+
+\section{Implementación de \texttt{BCH\_Codec}}
+\label{sec:bch_codec}
+
+En esta sección se presenta la implementación completa de la clase \texttt{BCH\_Codec}, que concentra tanto la generación del polinomio generador como la codificación, la detección de errores y la corrección de bloques recibidos. A diferencia de las clases anteriores, aquí no se implementa una sola operación aislada, sino el flujo completo del codificador/decodificador BCH.
+
+\subsection{Estructura de datos}
+
+Los atributos relevantes de la clase \texttt{BCH\_Codec} son:
+
+\begin{lstlisting}[style=CodigoCPP]
+int m;                // Grado del cuerpo
+int t;                // Capacidad de correccion
+int n;                // Longitud del codigo (2^m - 1)
+int k;                // Longitud del mensaje (n - grado(generator))
+GaloisField gf;       // cuerpo asociado
+Polynomial generator; // Polinomio generador
+\end{lstlisting}
+
+Además, la clase mantiene un método privado \texttt{computeGeneratorPolynomial()} encargado de construir el polinomio generador a partir de los polinomios mínimos necesarios para el BCH elegido.
+
+\subsection{Constructor y cálculo del generador}
+
+El constructor comprueba que $1\le m\le 15$ y $1 \le 2t < n$. Una vez validados los parámetros, inicializa el cuerpo de Galois, calcula \texttt{n = $2^m - 1$} y determina \texttt{k} a partir del grado del polinomio generador. La construcción del generador se delega a \texttt{computeGeneratorPolynomial()}, que recorre las raíces conjugadas y acumula los polinomios mínimos correspondientes.
+
+\begin{lstlisting}[style=CodigoCPP]
+BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
+    : m(m), t(t), gf(m, primitive_poly), generator(gf, {}) {
+    if (m < 1 || m > 15) {
+        throw std::invalid_argument("Invalid BCH parameters: m must be between 1 and 15");
+    }
+
+    n = (1 << m) - 1;
+
+    if (t <= 0 || 2LL * t >= n) {
+        throw std::invalid_argument("Invalid BCH parameters: t must satisfy 1 <= 2t < n");
+    }
+
+    computeGeneratorPolynomial();
+    k = n - generator.getDegree();
+}
+\end{lstlisting}
+
+\begin{lstlisting}[style=CodigoCPP]
+void BCH_Codec::computeGeneratorPolynomial() {
+    generator = Polynomial(gf, std::vector<uint16_t>{1});
+    std::unordered_set<uint16_t> processed_exp;
+
+    for (uint16_t i = 1; i <= 2 * t; i++) {
+        if (processed_exp.count(i)) continue;
+
+        Polynomial mi(gf, {1});
+        uint16_t currExp = i;
+
+        do {
+            uint16_t root = gf.power(2, currExp);
+            mi = mi * Polynomial(gf, {root, 1});
+            processed_exp.insert(currExp);
+            currExp = (currExp * 2) % n;
+        } while (currExp != i);
+
+        generator = generator * mi;
+    }
+}
+\end{lstlisting}
+
+\subsection{Codificación sistemática (versión empaquetada)}
+
+La versión optimizada utilizada en el simulador convierte el mensaje y el generador en \texttt{PackedBit} y realiza la división polinómica mediante XOR desplazado. Esta codificación es sistemática: los bits de información se conservan y los bits de paridad se añaden al principio de la palabra de código.
+
+Las etapas principales son:
+
+\begin{enumerate}
+  \item Extender el mensaje añadiendo $g$ ceros a la izquierda, donde $g=\deg(generator)$.
+  \item Construir \texttt{PackedBit} para el vector extendido y para el polinomio generador.
+  \item Iterar desde el bit más significativo; si el bit es 1, aplicar \texttt{xorShifted} con el generador alineado.
+  \item Convertir el buffer resultante a vector y extraer los primeros $g$ bits como paridad. Concatenar paridad y mensaje.
+\end{enumerate}
+
+\begin{lstlisting}[style=CodigoCPP]
+std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
+    if (message.size() != static_cast<size_t>(k))
+        throw std::invalid_argument("Message length must be exactly k");
+
+    int g = generator.getDegree();
+
+    // 1. Mensaje extendido: m(x) * x^g
+    std::vector<uint16_t> buffer(g, 0);
+    buffer.insert(buffer.end(), message.begin(), message.end());
+    PackedBit binaryBuffer(buffer);
+
+    // 2. Generador en forma binaria
+    std::vector<uint16_t> gen_bits(g+1, 0);
+    for (int deg = 0; deg <= g; ++deg) gen_bits[deg] = generator.getCoef(deg);
+    PackedBit gen_packed(gen_bits);
+
+    // 3. Division polinomica: si MSB = 1, XOR del generador alineado
+    for (int i = buffer.size() - 1; i >= g; --i) {
+        if (binaryBuffer.get(i)) {
+            size_t shift = (i - g);
+            binaryBuffer.xorShifted(gen_packed, shift);
+        }
+    }
+
+    // 4. Extraer resto y formar palabra sistematica
+    buffer = binaryBuffer.toVector();
+    std::vector<uint16_t> parity(buffer.begin(), buffer.begin() + g);
+    parity.insert(parity.end(), message.begin(), message.end());
+    return parity;
+}
+\end{lstlisting}
+
+\subsection{Detección de errores mediante síndromes}
+
+Para el proceso de decodificación, el primer paso consiste en calcular el vector de síndromes. Si todos son cero, el bloque recibido es válido; en caso contrario, se detecta la presencia de errores.
+
+\begin{lstlisting}[style=CodigoCPP]
+std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received, bool &error) {
+    Polynomial r(gf, received);
+    std::vector<uint16_t> synd(2 * t + 1, 0);
+    error = false;
+    for(int i=1; i<=2*t; i++){
+        if (i%2 == 0){
+            synd[i] = gf.power(synd[i/2],2);
+        } else{
+            uint16_t root = gf.power(2, i);
+            synd[i] = r.evaluate(root);
+        }
+        if (synd[i] != 0 and !error){
+            error = true;
+        }
+    }
+    return synd;
+}
+\end{lstlisting}
+
+La implementación aprovecha la propiedad de los síndromes en cuerpos binarios: los índices pares se obtienen por cuadrado del síndrome anterior, lo que reduce el número de evaluaciones directas del polinomio recibido.
+
+\subsection{Localización de errores con Berlekamp-Massey}
+
+Una vez detectada la presencia de errores, la clase estima el polinomio localizador de errores mediante el algoritmo de Berlekamp-Massey. La implementación evita el coste de construir objetos \texttt{Polynomial} en cada iteración y trabaja directamente sobre vectores de coeficientes.
+
+\begin{lstlisting}[style=CodigoCPP]
+Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
+    std::vector<uint16_t> C = {1}; 
+    std::vector<uint16_t> B = {1}; 
+    int L = 0;
+    int shift_m = 1;
+    uint16_t db = 1;
+
+    for (int i = 1; i <= 2 * t; i++) {
+        uint16_t d = synd[i];
+        int max_j = std::min(L, (int)C.size() - 1);
+        for (int j = 1; j <= max_j; j++) {
+            d = gf.add(d, gf.multiply(C[j], synd[i - j]));
+        }
+
+        if (d == 0) {
+            shift_m++;
+        } else {
+            std::vector<uint16_t> oldC = C;
+            uint16_t factor = gf.multiply(d, gf.inverse(db));
+
+            size_t neededSize = B.size() + shift_m;
+            if (C.size() < neededSize) {
+                C.resize(neededSize, 0);
+            }
+
+            for (size_t j = 0; j < B.size(); j++) {
+                C[j + shift_m] = gf.add(C[j + shift_m], gf.multiply(factor, B[j]));
+            }
+
+            if (2 * L <= i - 1) {
+                L = i - L;
+                B = oldC;
+                db = d;
+                shift_m = 1;
+            } else {
+                shift_m++;
+            }
+        }
+    }
+    return Polynomial(gf, C);
+}
+\end{lstlisting}
+
+\subsection{Decodificación}
+
+La decodificación combina la detección de errores, la estimación del polinomio localizador y la búsqueda de raíces de ese polinomio mediante la búsqueda de Chien.
+
+El flujo de corrección es el siguiente:
+
+\begin{enumerate}
+  \item Se calcula el síndrome del bloque recibido.
+  \item Si no hay errores, se extrae directamente la parte de información.
+  \item Si hay errores, se aplica Berlekamp-Massey para obtener el polinomio localizador.
+  \item Se realiza una búsqueda de raíces para localizar las posiciones erróneas.
+  \item Si el número de raíces encontradas coincide con el grado del polinomio, se corrigen los bits y se devuelve el mensaje.
+\end{enumerate}
+
+\begin{lstlisting}[style=CodigoCPP]
+bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16_t>& message_out) {
+    if (received.size() != static_cast<size_t>(n)) {
+        throw std::invalid_argument("La longitud de la palabra recibida debe ser exactamente n");
+    }
+
+    std::vector<uint16_t> corrected = received;
+    bool errorsDetected = false;
+
+    // 1. Calcular sindromes para detectar errores del canal
+    std::vector<uint16_t> synd = syndrome(corrected, errorsDetected);
+
+    // Si no hay errores, extraer el mensaje y devolver operacion exitosa
+    if (!errorsDetected) {
+        message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
+        return true; 
+    }
+
+    // 2. Si hay errores, aplicar Berlekamp-Massey
+    Polynomial errorLocator = berlekampMassey(synd);
+    int L = errorLocator.getDegree();
+
+    // 3. Comprobacion de errores incorregibles
+    if (L == 0 || L > t) {
+        // Fallo: demasiados errores. Devolver mensaje con errores residuales
+        message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
+        return false; 
+    }
+
+    // 4. Busqueda de Chien para encontrar posiciones erroneas
+    std::vector<uint16_t> reg(L + 1, 0);
+    for (int i = 0; i <= L; i++) {
+        reg[i] = errorLocator.getCoef(i);
+    }
+
+    std::vector<uint16_t> factors(L + 1);
+    for (int i = 0; i <= L; i++) {
+        factors[i] = gf.power(2, n - i); // Equivalente a alpha^(-j)
+    }
+
+    int rootsFound = 0;
+    for (int i = 0; i < n; i++) {
+        uint16_t sum = 0;
+        for (int j = 0; j <= L; j++) {
+            sum = gf.add(sum, reg[j]);
+        }
+
+        if (sum == 0) {
+            corrected[i] ^= 1; // Invertir el bit erroneo
+            rootsFound++;
+        }
+
+        // Actualizar registros para la siguiente iteracion
+        for (int j = 0; j <= L; j++) {
+            reg[j] = gf.multiply(reg[j], factors[j]);
+        }
+    }
+
+    // 5. Comprobacion de integridad de la busqueda de Chien
+    if (rootsFound != L) {
+        // Fallo: el polinomio indicaba L errores, pero se encontraron un numero distinto
+        message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
+        return false; 
+    }
+
+    // 6. Decodificacion exitosa (BCH corrigio el bloque)
+    message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
+    return true; 
+}
+\end{lstlisting}
+
+\subsection{Comentarios de diseño}
+
+\begin{itemize}
+  \item \textbf{Rendimiento}: \texttt{PackedBit} reduce el número de operaciones XOR.
+  \item \textbf{Reutilización}: El cálculo del generador y la decodificación están encapsulados en métodos privados y públicos separados, lo que hace más legible el flujo de la clase.
+\end{itemize}
+
+\section{Implementación del Canal de Ruido}
+\label{sec:channel}
+
+El componente \texttt{Channel} modela los principales canales de ruido usados en las simulaciones: el canal binario simétrico (BSC) y el canal AWGN con decisión dura. La clase encapsula un generador de números aleatorios \texttt{std::mt19937} y expone métodos claros para aplicar cada modelo de ruido.
+
+\subsection{Interfaz pública}
+
+La interfaz de \texttt{Channel} se resume en:
+
+\begin{lstlisting}[style=CodigoCPP]
+class Channel{
+private:
+    std::mt19937 rng; // Generador de numeros aleatorios
+public:
+    Channel();
+    std::vector<uint16_t> applyBSC(const std::vector<uint16_t>& bits, double bit_error_rate);
+    std::vector<double> transmitAWGN(const std::vector<uint16_t>& bits, double es_n0_db);
+    std::vector<uint16_t> applyAWGNHardDecision(const std::vector<uint16_t>& bits, double es_n0_db);
+};
+\end{lstlisting}
+
+\subsection{Constructor}
+
+El constructor inicializa \texttt{rng} con una semilla no determinista tomada de \texttt{std::random\_device} para obtener trayectorias de ruido reproducibles solo si se sustituye la semilla.
+
+\begin{lstlisting}[style=CodigoCPP]
+Channel::Channel() {
+    std::random_device rd;
+    rng = std::mt19937(rd());
+}
+\end{lstlisting}
+
+\subsection{Canal Binario Simétrico (BSC)}
+
+\texttt{applyBSC} aplica fallos independientes por bit con probabilidad \texttt{bit\_error\_rate} usando una distribución de Bernoulli. Valida el parámetro de probabilidad y lanza \texttt{std::invalid\_argument} si está fuera de rango.
+
+\begin{lstlisting}[style=CodigoCPP]
+std::vector<uint16_t> Channel::applyBSC(const std::vector<uint16_t>& bits, double bit_error_rate) {
+    if (bit_error_rate < 0.0 || bit_error_rate > 1.0) {
+        throw std::invalid_argument("bit_error_rate must be between 0 and 1");
+    }
+
+    std::bernoulli_distribution flip(bit_error_rate);
+    std::vector<uint16_t> noisy_bits = bits;
+    for (uint16_t& bit : noisy_bits) {
+        if (flip(rng)) bit ^= 1;
+    }
+
+    return noisy_bits;
+}
+\end{lstlisting}
+
+\subsection{Canal AWGN}
+
+Para señalización binaria antipodal se mapea cada bit en símbolo $+1$ o $-1$ y se añade ruido Gaussiano con desviación estándar calculada a partir de \texttt{$E_s/N_0$}. La función auxiliar \texttt{dbToLinear} convierte dB a escala lineal.
+
+\begin{lstlisting}[style=CodigoCPP]
+double dbToLinear(double db_value) {
+    return std::pow(10.0, db_value / 10.0);
+}
+
+std::vector<double> Channel::transmitAWGN(const std::vector<uint16_t>& bits, double es_n0_db) {
+    const double es_n0_linear = dbToLinear(es_n0_db);
+    const double sigma = std::sqrt(1.0 / (2.0 * es_n0_linear));
+
+    std::normal_distribution<double> noise(0.0, sigma);
+    std::vector<double> samples; samples.reserve(bits.size());
+
+    for (uint16_t bit : bits) {
+        const double symbol = (bit == 0) ? 1.0 : -1.0;
+        samples.push_back(symbol + noise(rng));
+    }
+
+    return samples;
+}
+\end{lstlisting}
+
+\subsection{Decisión dura sobre AWGN}
+
+La función \texttt{applyAWGNHardDecision} realiza la transmisión AWGN y aplica una decisión dura: si la muestra es $\ge 0$ se interpreta como 0, en caso contrario como 1.
+
+\begin{lstlisting}[style=CodigoCPP]
+std::vector<uint16_t> Channel::applyAWGNHardDecision(const std::vector<uint16_t>& bits, double es_n0_db) {
+    std::vector<double> samples = transmitAWGN(bits, es_n0_db);
+    std::vector<uint16_t> hard_bits; hard_bits.reserve(samples.size());
+    for (double sample : samples) hard_bits.push_back(sample >= 0.0 ? 0u : 1u);
+    return hard_bits;
+}
+\end{lstlisting}
+
+\subsection{Decisiones de diseño y uso}
+
+\begin{itemize}
+  \item \textbf{Separación de responsabilidades}: el canal ofrece modelos de canal (BSC, AWGN) como funciones independientes, facilitando su comparación experimental.
+  \item \textbf{Reproducibilidad}: la semilla de \texttt{rng} se extrae de \texttt{random\_device} por defecto; para tests reproducibles puede sustituirse por una semilla fija.
+\end{itemize}
+
+\section{Arquitectura del Simulador y Motor de Ejecución}
+\label{sec:bch_simulator}
+
+La clase \texttt{BCH\_Simulator} actúa como el motor principal del proyecto. Su responsabilidad es orquestar las instancias del codificador/decodificador (\texttt{BCH\_Codec}) y del canal ruidoso (\texttt{Channel}), gestionar el barrido de relaciones señal a ruido ($E_b/N_0$), y recolectar las métricas de rendimiento para su posterior análisis.
+
+\subsection{Estructuras de Configuración y Resultados}
+
+Para garantizar la modularidad, los parámetros de entrada se encapsulan en la estructura \texttt{SimulationConfig}, la cual define los parámetros del código ($m, t$), el rango de simulación, y los criterios de parada estadística. De forma análoga, la estructura \texttt{PointResults} consolida las métricas de salida por cada punto de $E_b/N_0$.
+
+\begin{lstlisting}[style=CodigoCPP]
+struct PointResults { 
+    double ebno_db; 
+    double ber;             // Bit Error Rate (Codificado)
+    double ber_uncoded;     // Bit Error Rate (Sin codificar)
+    double cwer;            // Codeword Error Rate
+    long codewords_simulated; 
+    double avg_enc_us;      // Latencia media de codificacion
+    double avg_dec_us;      // Latencia media de decodificacion
+};
+
+struct SimulationConfig { 
+    int m = 7; 
+    int t = 10; 
+    double ebno_min = 0.0; 
+    double ebno_max = 12.0; 
+    double step = 1.0; 
+    int min_codeword_errors = 100; // Criterio de parada Monte Carlo
+    long max_codewords = 1000000; 
+    bool use_file = false;
+    std::string input_path = ""; 
+};
+\end{lstlisting}
+
+\subsection{Motor de Simulación y Paralelización (OpenMP)}
+
+El núcleo computacional del simulador reside en el método \texttt{simulatePoint}, encargado de generar las transmisiones para un valor específico de $E_b/N_0$. Dado que las simulaciones de Monte Carlo para tasas de error bajas (BER $< 10^{-5}$) requieren procesar millones de bloques, este método ha sido paralelizado utilizando OpenMP.
+
+\subsubsection{Gestión de Concurrencia y Condición de Parada}
+
+Para maximizar el escalado multinúcleo, se instancian copias locales del codificador y del canal por cada hilo (\textit{thread}), eliminando cualquier contención por memoria compartida. Asimismo, la recolección de estadísticas globales se realiza mediante \texttt{\#pragma omp atomic}, las cuales son operaciones a nivel de hardware significativamente más rápidas que los bloques \texttt{critical} tradicionales.
+
+Un aspecto fundamental de este motor es su criterio de parada dinámico. En lugar de procesar siempre el límite máximo de bloques (\texttt{max\_codewords}), los hilos monitorizan de forma atómica el número de tramas erróneas acumuladas. Una vez superado el umbral de significancia estadística (\texttt{min\_codeword\_errors}, típicamente 100 errores), los hilos abortan el procesamiento de nuevos bloques. Esta decisión reduce drásticamente el tiempo de simulación en canales ruidosos (valores bajos de $E_b/N_0$), concentrando la potencia de cálculo únicamente en las regiones asintóticas donde los errores son infrecuentes.
+
+\begin{lstlisting}[style=CodigoCPP]
+PointResults BCH_Simulator::simulatePoint(...) {
+    // ... (Inicializacion de variables y conversion a Es/N0) ...
+
+    #pragma omp parallel
+    {
+        std::mt19937 rng(std::random_device{}()); // Generador PRNG aislado por hilo
+        BCH_Codec local_bch = bch;
+        Channel local_channel = channel;
+
+        #pragma omp for schedule(dynamic)
+        for (long iter = 0; iter < max_iterations; ++iter) {
+            
+            // Condicion de parada estadistica (Monte Carlo)
+            if (!cfg.use_file) {
+                long cur_codeword_errors;
+                #pragma omp atomic read
+                cur_codeword_errors = total_codeword_errors;
+                if (cur_codeword_errors >= cfg.min_codeword_errors) continue;
+            }
+
+            // ... (Generacion, Codificacion y Transmision) ...
+
+            // Evaluacion del exito de la decodificacion
+            if (!success || bit_errors_in_codeword > 0) {
+                #pragma omp atomic
+                total_codeword_errors++;
+                #pragma omp atomic
+                total_bit_errors += bit_errors_in_codeword;
+            }
+
+            #pragma omp atomic
+            total_bit_errors_uncoded += bit_errors_uncoded_in_codeword;
+            
+            #pragma omp atomic
+            codewords++;
+        }
+    }
+    // ... (Calculo de tasas finales BER y CWER) ...
+}
+\end{lstlisting}
+
+\subsection{Decisiones de Diseño Adicionales}
+
+\begin{itemize}
+    \item \textbf{Inyección de Tráfico Real}: Además del generador pseudoaleatorio, el simulador permite inyectar archivos binarios reales (\textit{files}) como fuente de datos. Esto no solo valida la total transparencia del sistema ante cualquier secuencia de bits, sino que permite extraer archivos corruptos post-simulación para analizar cualitativamente el impacto de los errores residuales (por ejemplo, evaluando la degradación visual en archivos de imagen).
+    \item \textbf{Métricas de Latencia}: La recolección de los tiempos de codificación y decodificación (\texttt{avg\_enc\_us}, \texttt{avg\_dec\_us}) se realiza mediante la librería \texttt{<chrono>} de alta resolución, encapsulando estrictamente las llamadas algorítmicas para aislar el coste real del \textit{hardware} frente a operaciones de E/S de memoria.
+    \item \textbf{Exportación Transparente}: Todas las métricas convergidas se vuelcan automáticamente en formato \texttt{CSV}, permitiendo su ingesta directa en herramientas de postprocesado como Python (Matplotlib/Pandas) para la generación de las curvas de rendimiento abordadas en el siguiente capítulo.
+\end{itemize}

@@ -224,7 +224,7 @@ std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received,
 //     }
 //     return C;
 // }
-Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t> synd) {
+Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
     // Use vectors directly to avoid Polynomial overhead and trim()
     std::vector<uint16_t> C = {1}; 
     std::vector<uint16_t> B = {1}; 
