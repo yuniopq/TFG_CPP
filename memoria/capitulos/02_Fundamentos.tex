@@ -1,2 +1,43 @@
 \chapter{Fundamentos Matemáticos}
 \label{ch:fundamentos}
+
+En este capítulo se recogen las nociones matemáticas necesarias para entender la construcción y el funcionamiento de los códigos BCH implementados en este trabajo. El objetivo no es presentar una teoría exhaustiva, sino mostrar los conceptos que se utilizan después en la codificación, la decodificación y la simulación sobre canales ruidosos.
+
+\section{Cuerpos Finitos}
+
+Los códigos BCH se construyen sobre extensiones finitas del cuerpo binario, por lo que el punto de partida natural es la aritmética en $GF(2)$ y su extensión a $GF(2^m)$.
+
+\subsection{El cuerpo binario $GF(2)$}
+
+El cuerpo $GF(2)$ contiene únicamente dos elementos, $\{0,1\}$, y sus operaciones se realizan módulo 2. En particular, la suma coincide con la operación XOR:
+
+\[
+0+0=0, \qquad 0+1=1, \qquad 1+0=1, \qquad 1+1=0.
+\]
+
+Esta propiedad resulta especialmente útil en codificación de canal, porque permite representar la suma de bits como una operación lógica muy eficiente a nivel de máquina.
+
+\subsection{Extensiones $GF(2^m)$}
+
+Para construir códigos BCH de longitud $n = 2^m - 1$ se trabaja sobre el cuerpo de extensión $GF(2^m)$. Sus elementos pueden interpretarse como polinomios de grado menor que $m$ con coeficientes en $GF(2)$, reducidos módulo un polinomio irreducible de grado $m$.
+
+Si $p(x)$ es un polinomio irreducible primitivo de grado $m$, entonces el cuerpo se puede generar a partir de una raíz $\alpha$ de dicho polinomio. En ese caso, cada elemento no nulo del cuerpo puede escribirse como una potencia de $\alpha$:
+
+\[
+GF(2^m) = \{0, 1, \alpha, \alpha^2, \dots, \alpha^{2^m-2}\}.
+\]
+
+Esta representación es la base de las tablas logarítmica y exponencial utilizadas en la implementación del códec. Gracias a ellas, la multiplicación, la división y la inversa en $GF(2^m)$ pueden calcularse de forma rápida mediante operaciones sobre exponentes, en lugar de recurrir a una reducción polinómica completa en cada operación.
+
+\subsection{Representación polinómica}
+
+En la práctica, un elemento de $GF(2^m)$ puede representarse de dos formas equivalentes:
+
+\begin{itemize}
+	\item \textbf{Forma polinómica:} como combinación lineal de potencias de una raíz $\alpha$.
+	\item \textbf{Forma exponencial:} como una potencia de $\alpha$, cuando el elemento es distinto de cero.
+\end{itemize}
+
+La forma polinómica es útil para definir operaciones algebraicas y construir polinomios sobre el cuerpo, mientras que la forma exponencial es especialmente conveniente para implementar multiplicaciones y divisiones de manera eficiente.
+
+En las siguientes secciones se introducen los polinomios sobre cuerpos finitos, los polinomios mínimos y la construcción del polinomio generador de un código BCH.
