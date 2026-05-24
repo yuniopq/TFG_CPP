@@ -1,43 +1,267 @@
 \chapter{Fundamentos Matemáticos}
-\label{ch:fundamentos}
+\label{cap:fundamentos}
 
-En este capítulo se recogen las nociones matemáticas necesarias para entender la construcción y el funcionamiento de los códigos BCH implementados en este trabajo. El objetivo no es presentar una teoría exhaustiva, sino mostrar los conceptos que se utilizan después en la codificación, la decodificación y la simulación sobre canales ruidosos.
+En este capítulo se presentan las bases matemáticas neccesarias para comprender el comportamiento de los códigos BCH, la aritmética sobre los cuerpos finitos y el modelado del canal de transmisión de datos.
 
-\section{Cuerpos Finitos}
+\section{Introducción a la Codificación de Canal}
+El problema fundamental de la comunicación consiste en reproducir en un punto del destino un mensaje seleccionado en otro punto de origen de manera exacta o aproximada. Dado que los canales de comunicación introducen ruido y distorsión, es necesario introducir redundancia en los mensajes para permitir al receptor detectar y corregir los errores.
 
-Los códigos BCH se construyen sobre extensiones finitas del cuerpo binario, por lo que el punto de partida natural es la aritmética en $GF(2)$ y su extensión a $GF(2^m)$.
+En el caso de los códigos de bloque, la redundancia se introduce segmentando la información en bloques de k bits. A continuación, el codificador incorpora $n-k$ bits de paridad, obteniendo así una palabra de código de longitud n. Este tipo de codificación se representa habitualmente mediante la notación (n,k).
 
-\subsection{El cuerpo binario $GF(2)$}
 
-El cuerpo $GF(2)$ contiene únicamente dos elementos, $\{0,1\}$, y sus operaciones se realizan módulo 2. En particular, la suma coincide con la operación XOR:
+\section{Códigos Lineales y Cíclicos}
+\label{sec:codigos_ciclicos}
 
+Para que un código de bloque sea implementable en la práctica, debe poseer una estructura que simplifique su procesamiento.
+
+\subsection{Linealidad}
+
+Un código de bloque es \textit{lineal} si, y sólo si, la suma módulo 2 (XOR) de dos palabras código válidas produce otra palabra de código válida. Equivalentemente, el conjunto de palabras código forma un subespacio vectorial sobre \(GF(2)\).
+
+Esta propiedad permite estudiar la capacidad de detección y corrección de errores del código a partir de su distancia mínima o, de manera equivalente en códigos lineales, de su peso de Hamming mínimo.
+
+\subsection{Propiedad Cíclica y Representación Polinómica}
+
+Un código lineal se denomina \textit{cíclico} si cualquier desplazamiento circular de una palabra de código produce otra palabra perteneciente al mismo código. Es decir, si
 \[
-0+0=0, \qquad 0+1=1, \qquad 1+0=1, \qquad 1+1=0.
+(c_0,c_1,\dots,c_{n-1}) \in C
+\]
+entonces también
+\[
+(c_{n-1},c_0,c_1,\dots,c_{n-2}) \in C
 \]
 
-Esta propiedad resulta especialmente útil en codificación de canal, porque permite representar la suma de bits como una operación lógica muy eficiente a nivel de máquina.
-
-\subsection{Extensiones $GF(2^m)$}
-
-Para construir códigos BCH de longitud $n = 2^m - 1$ se trabaja sobre el cuerpo de extensión $GF(2^m)$. Sus elementos pueden interpretarse como polinomios de grado menor que $m$ con coeficientes en $GF(2)$, reducidos módulo un polinomio irreducible de grado $m$.
-
-Si $p(x)$ es un polinomio irreducible primitivo de grado $m$, entonces el cuerpo se puede generar a partir de una raíz $\alpha$ de dicho polinomio. En ese caso, cada elemento no nulo del cuerpo puede escribirse como una potencia de $\alpha$:
-
+Cada palabra de código de longitud \(n\) puede representarse mediante un polinomio de grado menor que \(n\):
 \[
-GF(2^m) = \{0, 1, \alpha, \alpha^2, \dots, \alpha^{2^m-2}\}.
+c(x)=c_0+c_1x+c_2x^2+\dots+c_{n-1}x^{n-1}
 \]
 
-Esta representación es la base de las tablas logarítmica y exponencial utilizadas en la implementación del códec. Gracias a ellas, la multiplicación, la división y la inversa en $GF(2^m)$ pueden calcularse de forma rápida mediante operaciones sobre exponentes, en lugar de recurrir a una reducción polinómica completa en cada operación.
+En esta representación, un desplazamiento cíclico equivale a multiplicar por \(x\) módulo \(x^n-1\). Por ello, los códigos cíclicos pueden estudiarse como
+\[
+\mathbb{F}_2[x]/(x^n-1)
+\]
+lo que permite realizar las operaciones de codificación y decodificación mediante operaciones algebraicas con polinomios.
 
-\subsection{Representación polinómica}
+\section{Cuerpos Finitos (Cuerpos de Galois)}
+\label{sec:cuerpos_galois}
 
-En la práctica, un elemento de $GF(2^m)$ puede representarse de dos formas equivalentes:
+La aritmética polinómica en teoría de códigos se define sobre cuerpos finitos, también conocidos como cuerpos de Galois, denotados como \(GF(q)\) o \(\mathbb{F}_q\).
 
+Para aplicaciones digitales binarias, se emplean cuerpos de extensión de la forma \(GF(2^m)\), que son extensiones del cuerpo base \(GF(2)=\{0,1\}\).
+
+\subsection{Construcción y Polinomios Primitivos}
+
+Un cuerpo \(GF(2^m)\) contiene \(2^m\) elementos y puede construirse a partir del cuerpo base \(GF(2)\) utilizando un polinomio irreducible primitivo \(p(x)\) de grado \(m\).
+
+Si \(\alpha\) es una raíz de \(p(x)\), entonces los elementos no nulos del cuerpo pueden expresarse como potencias sucesivas de \(\alpha\):
+
+\[
+\alpha^0, \alpha, \alpha^2, \dots, \alpha^{2^m-2}.
+\]
+
+En este caso, \(\alpha\) es un elemento primitivo del cuerpo, y genera todos los elementos no nulos del grupo multiplicativo de \(GF(2^m)\).
+
+\subsection{Representación Exponencial y Logarítmica}
+
+La representación de los elementos del cuerpo es fundamental para la eficiencia computacional. Mientras que la suma se realiza de forma directa mediante la operación lógica XOR, la multiplicación y división de elementos no nulos pueden simplificarse utilizando una representación exponencial.
+
+Si \(\alpha\) es un elemento primitivo de \(GF(2^m)\), entonces para dos exponentes \(i\) y \(j\):
+
+\begin{equation}
+\alpha^i \cdot \alpha^j = \alpha^{(i+j) \bmod (2^m-1)}
+\end{equation}
+
+y de forma análoga:
+
+\begin{equation}
+\frac{\alpha^i}{\alpha^j} = \alpha^{(i-j) \bmod (2^m-1)}.
+\end{equation}
+
+Esta propiedad permite implementar la multiplicación mediante tablas de logaritmos y antilogaritmos, reduciendo su complejidad computacional a accesos directos a memoria en tiempo constante \(O(1)\).
+\section{Fundamentos de los Códigos BCH}
+\label{sec:fundamentos_bch}
+
+Los códigos Bose--Chaudhuri--Hocquenghem (BCH) son una clase de códigos cíclicos que permiten ajustar de forma parametrizable su capacidad de corrección de errores.
+
+Para un entero positivo \(m \geq 3\), se define la longitud del código como:
+\[
+n = 2^m - 1.
+\]
+
+Para un parámetro de corrección de errores \(t\), el código BCH binario se construye sobre el cuerpo finito \(GF(2^m)\), imponiendo que el polinomio generador tenga como raíces un conjunto de potencias consecutivas de un elemento primitivo \(\alpha\):
+
+\[
+\alpha^1, \alpha^2, \dots, \alpha^{2t}.
+\]
+
+Para ello, es necesario considerar los polinomios mínimos asociados a dichas raíces.
+
+El polinomio mínimo \(m_i(x)\) de un elemento \(\alpha^i \in GF(2^m)\) se define como el polinomio de menor grado con coeficientes en \(GF(2)\) que tiene a \(\alpha^i\) como raíz. Este polinomio es irreducible sobre \(GF(2)\) y contiene también a todas las conjugadas de \(\alpha^i\).
+
+Dado que el polinomio generador debe anular simultáneamente todas las raíces especificadas, se obtiene como el mínimo común múltiplo de los polinomios mínimos correspondientes:
+
+\begin{equation}
+g(x) = \mathrm{mcm}\big(m_1(x), m_2(x), \dots, m_{2t}(x)\big).
+\end{equation}
+\section{Procesos de Codificación y Decodificación}
+\label{sec:procesos_codec}
+
+\subsection{Codificación Sistemática}
+
+En la codificación sistemática, los bits de información se transmiten sin modificación, mientras que los bits de paridad se añaden al final del bloque. En términos de polinomios, el proceso de codificación consiste en calcular:
+
+\[
+r(x) = (m(x)x^{n-k}) \bmod g(x),
+\]
+
+de forma que la palabra de código resultante es:
+
+\[
+c(x) = m(x)x^{n-k} + r(x).
+\]
+
+\subsection{Cálculo de Síndromes}
+
+El primer paso de la decodificación consiste en evaluar el polinomio recibido \(r(x) = c(x) + e(x)\), donde \(e(x)\) representa el patrón de error.
+
+Los síndromes se definen como:
+\begin{equation}
+S_i = r(\alpha^i), \quad i = 1, 2, \dots, 2t.
+\end{equation}
+
+Dado que las potencias \(\alpha^i\) son raíces del polinomio generador del código BCH, se cumple que \(c(\alpha^i)=0\), por lo que los síndromes dependen únicamente del error:
+\[
+S_i = e(\alpha^i).
+\]
+
+En \(GF(2^m)\), para dos elementos \(a\) y \(b\), se verifica la siguiente propiedad:
+\[
+(a + b)^2 = a^2 + 2ab + b^2.
+\]
+
+Sin embargo, nuestro caso se cumple que:
+\[
+2 \equiv 0 \pmod{2},
+\]
+por lo que el término cruzado desaparece:
+\[
+(a + b)^2 = a^2 + b^2.
+\]
+
+En consecuencia, para el síndrome:
+\[
+S_i = r(\alpha^i),
+\]
+se obtiene:
+\[
+S_i^2 = (r(\alpha^i))^2 = r(\alpha^i)^2.
+\]
+se deduce finalmente:
+\[
+S_{2i} = r(\alpha^{2i}) = (r(\alpha^i))^2 = S_i^2.
+\]
+
+Esta propiedad reduce el número de evaluaciones polinómicas necesarias en el cálculo de síndromes, ya que los valores pares pueden obtenerse directamente a partir de los impares.
+
+\subsection{Algoritmo de Berlekamp-Massey}
+
+El algoritmo de Berlekamp-Massey es un procedimiento iterativo que encuentra el polinomio localizador de errores $\sigma(x)$ de menor grado que satisface la secuencia de síndromes $S_1, S_2, \dots, S_{2t}$.
+
+Para su descripción matemática, se definen las siguientes variables de estado:
 \begin{itemize}
-	\item \textbf{Forma polinómica:} como combinación lineal de potencias de una raíz $\alpha$.
-	\item \textbf{Forma exponencial:} como una potencia de $\alpha$, cuando el elemento es distinto de cero.
+    \item $\sigma(x)$: Polinomio localizador en la iteración actual.
+    \item $B(x)$: Polinomio auxiliar que preserva el estado previo a la última actualización de grado.
+    \item $d$: Discrepancia calculada en la iteración actual.
+    \item $d_b$: Discrepancia guardada de la última actualización (actúa como factor de normalización).
+    \item $L$: Grado del polinomio $\sigma(x)$, que representa el número estimado de errores.
+    \item $m$: Factor de desplazamiento para alinear los polinomios.
 \end{itemize}
 
-La forma polinómica es útil para definir operaciones algebraicas y construir polinomios sobre el cuerpo, mientras que la forma exponencial es especialmente conveniente para implementar multiplicaciones y divisiones de manera eficiente.
+El algoritmo se inicializa asumiendo un canal sin errores: $\sigma(x) = 1$, $B(x) = 1$, $L = 0$, $d_b = 1$ y $m = 1$. 
 
-En las siguientes secciones se introducen los polinomios sobre cuerpos finitos, los polinomios mínimos y la construcción del polinomio generador de un código BCH.
+En cada paso iterativo $i$ (desde $i=1$ hasta $2t$), se evalúa si el polinomio $\sigma(x)$ actual predice correctamente el síndrome $S_i$. Para ello, se calcula la discrepancia $d$ como la combinación lineal de los coeficientes del polinomio y los síndromes anteriores, desarrollando los términos de la siguiente forma:
+$$ d = S_i + \sigma_1 S_{i-1} + \sigma_2 S_{i-2} + \dots + \sigma_L S_{i-L} $$
+
+Si $d = 0$, el polinomio $\sigma(x)$ es válido para predecir el síndrome actual. No se requiere corrección polinómica, por lo que únicamente se incrementa el factor de desplazamiento del polinomio auxiliar para la siguiente iteración:
+$$ m_{nuevo} = m + 1 $$
+
+Si $d \neq 0$, se produce un fallo de predicción y es necesario actualizar el polinomio localizador, que se consigue sumándole el polinomio auxiliar $B(x)$, multiplicado por la proporción entre las discrepancias y desplazado de $m$ posiciones:
+$$ \sigma_{nueva}(x) = \sigma(x) + \left( d \cdot (d_b)^{-1} \right) B(x) x^m  $$
+
+Tras esta actualización, se evalúa si es necesario incrementar la estimación de errores $L$. Esto ocurre si se cumple la cota $2L \leq n - 1$. En caso afirmativo, se renuevan las variables de estado de apoyo para futuras correcciones:
+$$ L_{nuevo} = n - L $$
+$$ B(x) = \sigma_{antiguo}(x) $$
+$$ d_b = d $$
+$$ m = 1 $$
+
+Si la cota no se cumple ($2L > n - 1$), la estimación $L$ y el polinomio $B(x)$ se mantienen intactos, y únicamente se incrementa el desplazamiento ($m_{nuevo} = m + 1$). Al concluir las $2t$ iteraciones, $\sigma(x)$ contendrá el polinomio localizador definitivo.
+\subsection{Búsqueda de Chien}
+
+La búsqueda de Chien puede interpretarse como una evaluación recursiva del polinomio localizador de errores $\sigma(x)$, evitando el costoso cálculo completo del polinomio en cada punto del cuerpo finito. 
+
+Sea el polinomio localizador de grado $L$:
+$$ \sigma(x) = \sigma_0 + \sigma_1 x + \sigma_2 x^2 + \dots + \sigma_L x^L $$
+
+Su evaluación para determinar si existe un error en la posición $i$ requiere calcular el valor en el punto $\alpha^{-i}$:
+$$ \sigma(\alpha^{-i}) = \sigma_0 + \sigma_1 (\alpha^{-i}) + \sigma_2 (\alpha^{-i})^2 + \dots + \sigma_L (\alpha^{-i})^L $$
+
+Para el siguiente punto de evaluación (posición $i+1$), la expresión matemática es:
+$$ \sigma(\alpha^{-(i+1)}) = \sigma_0 + \sigma_1 (\alpha^{-(i+1)}) + \sigma_2 (\alpha^{-(i+1)})^2 + \dots + \sigma_L (\alpha^{-(i+1)})^L $$
+
+Aplicando las propiedades exponenciales del cuerpo finito, se sabe que $\alpha^{-(i+1)} = \alpha^{-i} \cdot \alpha^{-1}$. Sustituyendo y separando los exponentes en cada uno de los términos:
+$$ \sigma(\alpha^{-(i+1)}) = \sigma_0 + \left[ \sigma_1 (\alpha^{-i}) \right] \alpha^{-1} + \left[ \sigma_2 (\alpha^{-i})^2 \right] \alpha^{-2} + \dots + \left[ \sigma_L (\alpha^{-i})^L \right] \alpha^{-L} $$
+
+Esta expansión evidencia la naturaleza recursiva del algoritmo: el término de grado $j$ en la iteración $i+1$ es exactamente el término de la iteración $i$ multiplicado por una constante $\alpha^{-j}$. 
+
+De esta forma, el algoritmo de Chien puede implementarse de manera eficiente utilizando un registro de desplazamiento que actualiza los valores de $\sigma_j (\alpha^{-i})^j$ en cada iteración, evitando la necesidad de recalcular el polinomio completo para cada posición.  
+
+\section{Modelado Matemático del Canal}
+\label{sec:modelo_canal}
+
+Para evaluar el rendimiento del sistema de codificación y decodificación, la transmisión física se modela mediante un canal con ruido blanco gaussiano aditivo (AWGN) y modulación binaria antipodal BPSK.
+
+En este esquema, cada bit codificado \(c_i \in \{0,1\}\) se transforma en un símbolo:
+\[
+s_i \in \{+1,-1\},
+\]
+de forma que:
+\[
+0 \rightarrow +1,
+\qquad
+1 \rightarrow -1.
+\]
+
+La señal recibida se modela como:
+\[
+y_i = s_i + n_i,
+\]
+donde \(n_i\) es una variable aleatoria gaussiana con distribución:
+\[
+n_i \sim \mathcal{N}(0,\sigma^2).
+\]
+
+Asumiendo símbolos BPSK normalizados y una relación energía por bit a densidad espectral de ruido \(E_b/N_0\), la desviación típica del ruido viene dada por:
+
+\begin{equation}
+\sigma =
+\sqrt{
+\frac{1}{
+2R\left(E_b/N_0\right)
+}
+},
+\end{equation}
+
+donde:
+\[
+R = \frac{k}{n}
+\]
+representa la tasa del código. La presencia de redundancia implica que la energía disponible por bit de información se distribuye entre un mayor número de bits transmitidos.
+
+En la decodificación algebraica con decisión dura, la señal recibida \(y_i\) se cuantiza mediante un umbral en cero:
+\[
+y_i \geq 0 \Rightarrow 0,
+\qquad
+y_i < 0 \Rightarrow 1.
+\]
+
+La secuencia binaria resultante constituye la palabra recibida \(r(x)\), utilizada posteriormente en el cálculo de síndromes.
