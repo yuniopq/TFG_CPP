@@ -20,42 +20,52 @@ void BCH_Simulator::run() {
     int n = bch.getN();
     int k = bch.getK();
 
-    vector<uint16_t> file_bits;
+    // --- MODO FICHERO ---
     if (cfg.use_file) {
-        cout << "[FILE] Loading file: " << cfg.input_path << endl;
-        file_bits = readFileToBits(cfg.input_path);
-        cout << "[FILE] Total bits: " << file_bits.size() << " (" << file_bits.size()/k << " blocks)" << endl;
+        std::cout << "[FILE] Loading file: " << cfg.input_path << std::endl;
+        std::vector<uint16_t> file_bits = readFileToBits(cfg.input_path);
+        std::cout << "[FILE] Total bits: " << file_bits.size() << " (" << file_bits.size()/k << " blocks)" << std::endl;
+        
+        std::vector<uint16_t> corrected_bits, noisy_bits;
+        
+        // Procesamos la imagen usando ebno_min como punto de inyección de ruido
+        std::cout << "[FILE] Procesando imagen a " << cfg.ebno_min << " dB..." << std::endl;
+        processFile(bch, channel, cfg.ebno_min, file_bits, corrected_bits, noisy_bits);
+        
+        std::string name_base = cfg.input_path.substr(cfg.input_path.find_last_of("/\\") + 1);
+        std::string out_name = "results/out_EbNo_" + std::to_string((int)cfg.ebno_min) + "_" + name_base;
+        std::string uncoded_name = "results/uncoded_EbNo_" + std::to_string((int)cfg.ebno_min) + "_" + name_base;
+        
+        saveBitsToFile(corrected_bits, out_name);
+        saveBitsToFile(noisy_bits, uncoded_name);
+        
+        std::cout << "[OK] Imágenes generadas con éxito en /results" << std::endl;
+        return; 
     }
 
-    cout << "\n=== BCH SIMULATION (" << n << "," << k << ") t=" << cfg.t << " ===" << endl;
-    cout << "------------------------------------------------------------------------" << endl;
-    cout << setw(10) << "Eb/N0(dB)" << setw(15) << "BER" << setw(15) << "BER_Uncoded" << setw(15) << "CWER" << setw(15) << "Codewords" << endl;
-    cout << "------------------------------------------------------------------------" << endl;
+    // --- MODO MONTECARLO ESTÁNDAR ---
+    std::cout << "\n=== BCH SIMULATION (" << n << "," << k << ") t=" << cfg.t << " ===" << std::endl;
+    std::cout << "------------------------------------------------------------------------" << std::endl;
+    std::cout << std::setw(10) << "Eb/N0(dB)" << std::setw(15) << "BER" << std::setw(15) << "BER_Uncoded" << std::setw(15) << "CWER" << std::setw(15) << "Codewords" << std::endl;
+    std::cout << "------------------------------------------------------------------------" << std::endl;
 
     for (double e = cfg.ebno_min; e <= cfg.ebno_max; e += cfg.step) {
-        vector<uint16_t> corrected_bits;
-        PointResults pr = simulatePoint(bch, channel, e, file_bits, corrected_bits);
+        PointResults pr = simulatePoint(bch, channel, e);
         all_results.push_back(pr);
         
-        cout << setw(10) << fixed << setprecision(1) << e 
-             << setw(15) << scientific << setprecision(3) << pr.ber 
-             << setw(15) << scientific << setprecision(3) << pr.ber_uncoded 
-               << setw(15) << pr.cwer 
-               << setw(15) << fixed << (long)pr.codewords_simulated << endl;
-
-        if (cfg.use_file) {
-            string out_name = "results/out_EbNo_" + to_string((int)e) + "_" + cfg.input_path;
-            saveBitsToFile(corrected_bits, out_name);
-        }
+        std::cout << std::setw(10) << std::fixed << std::setprecision(1) << e 
+                  << std::setw(15) << std::scientific << std::setprecision(3) << pr.ber 
+                  << std::setw(15) << std::scientific << std::setprecision(3) << pr.ber_uncoded 
+                  << std::setw(15) << pr.cwer 
+                  << std::setw(15) << std::fixed << (long)pr.codewords_simulated 
+                  << std::endl;
         
-        if (pr.cwer == 0 && !cfg.use_file) break; 
+        if (pr.cwer == 0) break;
     }
     exportCSV(n, k);
 }
 
-PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, 
-                                          const std::vector<uint16_t>& file_bits, 
-                                          std::vector<uint16_t>& out_corrected_bits) {
+PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db) {
     PointResults res;
     res.ebno_db = ebno_db;
     int k = bch.getK();
@@ -65,12 +75,7 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
     
     long total_bit_errors = 0, total_bit_errors_uncoded = 0, total_codeword_errors = 0, codewords = 0;
     long long total_enc_time = 0, total_dec_time = 0;
-
-    if (cfg.use_file) {
-        out_corrected_bits.clear();
-        out_corrected_bits.resize(file_bits.size(), 0);
-    }
-    long max_iterations = cfg.use_file ? (file_bits.size() / k) : cfg.max_codewords;
+    long max_iterations = cfg.max_codewords;
 
     #pragma omp parallel
     {
@@ -78,56 +83,47 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
         BCH_Codec local_bch = bch;
         Channel local_channel = channel;
 
-        // Metemos casi todos los contadores en la cláusula reduction
         #pragma omp for schedule(dynamic) reduction(+:total_bit_errors, total_bit_errors_uncoded, total_enc_time, total_dec_time, codewords)
         for (long iter = 0; iter < max_iterations; ++iter) {
             
             // Comprobación de parada temprana 
-            if (!cfg.use_file) {
-                long cur_codeword_errors;
-                #pragma omp atomic read
-                cur_codeword_errors = total_codeword_errors;
-                if (cur_codeword_errors >= cfg.min_codeword_errors) continue;
-            }
+            long cur_codeword_errors;
+            #pragma omp atomic read
+            cur_codeword_errors = total_codeword_errors;
+            if (cur_codeword_errors >= cfg.min_codeword_errors) continue;
 
-            vector<uint16_t> message(k);
-            if (cfg.use_file) {
-                for (int i = 0; i < k; i++) message[i] = file_bits[iter * k + i];
-            } else {
-                for (int i = 0; i < k; i++) message[i] = (rng() % 2);
-            }
+            // Generación de mensaje aleatorio
+            std::vector<uint16_t> message(k);
+            for (int i = 0; i < k; i++) message[i] = (rng() % 2);
 
-            auto t_enc_start = high_resolution_clock::now();
-            vector<uint16_t> encoded = local_bch.encode(message);
-            auto enc_us = duration_cast<microseconds>(high_resolution_clock::now() - t_enc_start).count();
+            // Codificación
+            auto t_enc_start = std::chrono::high_resolution_clock::now();
+            std::vector<uint16_t> encoded = local_bch.encode(message);
+            auto enc_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t_enc_start).count();
 
-            vector<uint16_t> noisy = local_channel.applyAWGNHardDecision(encoded, esno_db);
+            // Canal AWGN
+            std::vector<uint16_t> noisy = local_channel.applyAWGNHardDecision(encoded, esno_db);
 
-            auto t_dec_start = high_resolution_clock::now();
-            vector<uint16_t> decoded;
+            // Decodificación
+            auto t_dec_start = std::chrono::high_resolution_clock::now();
+            std::vector<uint16_t> decoded;
             bool success = local_bch.decode(noisy, decoded);
-            auto dec_us = duration_cast<microseconds>(high_resolution_clock::now() - t_dec_start).count();
+            auto dec_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t_dec_start).count();
             
-            if (cfg.use_file) {
-                size_t base_index = iter * k;
-                for (size_t i = 0; i < decoded.size(); ++i) {
-                    out_corrected_bits[base_index + i] = decoded[i];
-                }
-            }
-
-            vector<uint16_t> noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
+            // Evaluación del canal sin codificar
+            std::vector<uint16_t> noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
             int bit_errors_in_codeword = 0;
             int bit_errors_uncoded_in_codeword = 0;
+            
             for (int i = 0; i < k; i++) {
                 if (message[i] != noisy_uncoded[i]) bit_errors_uncoded_in_codeword++;
                 if (message[i] != decoded[i]) bit_errors_in_codeword++;
             }
 
-            // Actualización de errores
+            // Actualización de errores con sección crítica ligera
             if (!success || bit_errors_in_codeword > 0) {
                 #pragma omp atomic
                 total_codeword_errors++;
-                
                 total_bit_errors += bit_errors_in_codeword;
             }
 
@@ -147,6 +143,49 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
     }
     res.codewords_simulated = codewords;
     return res;
+}
+
+void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db, 
+                                const std::vector<uint16_t>& file_bits, 
+                                std::vector<uint16_t>& out_corrected,
+                                std::vector<uint16_t>& out_noisy) {
+    int k = bch.getK();
+    double rate = (double)k / bch.getN();
+    double esno_db = ebno_db + 10.0 * log10(rate);
+    
+    out_corrected.resize(file_bits.size(), 0);
+    out_noisy.resize(file_bits.size(), 0);
+    
+    long num_blocks = file_bits.size() / k;
+    
+    for (long iter = 0; iter < num_blocks; ++iter) {
+        size_t base_index = iter * k;
+        
+        std::vector<uint16_t> message(k);
+        for (int i = 0; i < k; i++) message[i] = file_bits[base_index + i];
+        
+        // ¡Magia! Si estamos en los primeros 54 bytes (cabecera BMP), no aplicamos ruido
+        if (base_index < 432) {
+            for (int i = 0; i < k; i++) {
+                out_corrected[base_index + i] = message[i];
+                out_noisy[base_index + i] = message[i];
+            }
+            continue;
+        }
+        
+        // Flujo normal para los píxeles
+        std::vector<uint16_t> encoded = bch.encode(message);
+        std::vector<uint16_t> noisy = channel.applyAWGNHardDecision(encoded, esno_db);
+        std::vector<uint16_t> noisy_uncoded = channel.applyAWGNHardDecision(message, ebno_db);
+        
+        std::vector<uint16_t> decoded;
+        bch.decode(noisy, decoded);
+        
+        for (int i = 0; i < k; i++) {
+            out_corrected[base_index + i] = decoded[i];
+            out_noisy[base_index + i] = noisy_uncoded[i];
+        }
+    }
 }
 
 // Auxiliary methods moved from main into the class

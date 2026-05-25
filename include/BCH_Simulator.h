@@ -39,10 +39,10 @@ private:
     SimulationConfig cfg;
     std::vector<PointResults> all_results;
 
-    PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db, 
-                               const std::vector<uint16_t>& file_bits, 
-                               std::vector<uint16_t>& out_corrected_bits);
-    
+    PointResults simulatePoint(BCH_Codec& bch, Channel& channel, double ebno_db);
+
+    void processFile(BCH_Codec &bch, Channel &channel, double ebno_db, const std::vector<uint16_t> &file_bits, std::vector<uint16_t> &out_corrected, std::vector<uint16_t> &out_noisy);
+
     // Utilidades
     std::vector<uint16_t> readFileToBits(const std::string& path);
     void saveBitsToFile(const std::vector<uint16_t>& bits, const std::string& path);
