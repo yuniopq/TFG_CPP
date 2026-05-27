@@ -286,8 +286,7 @@ Además, la clase mantiene un método privado \texttt{computeGeneratorPolynomial
 
 \subsection{Constructor y cálculo del generador}
 
-El constructor comprueba que $1\le m\le 15$ y $1 \le 2t < n$. Una vez validados los parámetros, inicializa el cuerpo de Galois, calcula \texttt{n = $2^m - 1$} y determina \texttt{k} a partir del grado del polinomio generador. La construcción del generador se delega a \texttt{computeGeneratorPolynomial()}, que recorre las raíces conjugadas y acumula los polinomios mínimos correspondientes.
-
+El constructor comprueba que $1\le m\le 15$ y $1 \le 2t < n$. Una vez validados los parámetros, inicializa el cuerpo de Galois, calcula \texttt{n = $2^m - 1$} y determina \texttt{k} a partir del grado del polinomio generador. La función \texttt{computeGeneratorPolynomial()} es la encargada de construir el polinomio generador; para ello, recorre las raíces conjugadas y multiplica los polinomios mínimos correspondientes.
 \begin{lstlisting}[style=CodigoCPP]
 BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
     : m(m), t(t), gf(m, primitive_poly), generator(gf, {}) {
@@ -463,7 +462,7 @@ public:
 
 \subsection{Constructor}
 
-El constructor inicializa \texttt{rng} con una semilla no determinista tomada de \texttt{std::random\_device} para obtener trayectorias de ruido reproducibles solo si se sustituye la semilla.
+El constructor inicializa \texttt{rng} con una semilla no determinista mediante \texttt{random\_device} para obtener trayectorias de ruido reproducibles solo si se sustituye la semilla.
 
 \begin{lstlisting}[style=CodigoCPP]
 Channel::Channel() {
@@ -474,7 +473,7 @@ Channel::Channel() {
 
 \subsection{Canal Binario Simétrico (BSC)}
 
-\texttt{applyBSC} aplica fallos independientes por bit con probabilidad \texttt{bit\_error\_rate} usando una distribución de Bernoulli. Valida el parámetro de probabilidad y lanza \texttt{std::invalid\_argument} si está fuera de rango.
+\texttt{applyBSC} aplica fallos independientes por bit con probabilidad \texttt{bit\_error\_rate} usando una distribución de Bernoulli. Valida el parámetro de probabilidad y lanza una excepción si está fuera de rango.
 
 \begin{lstlisting}[style=CodigoCPP]
 std::vector<uint16_t> Channel::applyBSC(const std::vector<uint16_t>& bits, double bit_error_rate) {
@@ -494,7 +493,7 @@ std::vector<uint16_t> Channel::applyBSC(const std::vector<uint16_t>& bits, doubl
 
 \subsection{Canal AWGN}
 
-Para señalización binaria antipodal se mapea cada bit en símbolo $+1$ o $-1$ y se añade ruido Gaussiano con desviación estándar calculada a partir de \texttt{$E_s/N_0$}. La función auxiliar \texttt{dbToLinear} convierte dB a escala lineal.
+Para señalización binaria se mapea cada bit en símbolo $+1$ o $-1$ y se añade ruido Gaussiano con desviación estándar calculada a partir de \texttt{$E_s/N_0$}. La función auxiliar \texttt{dbToLinear} convierte dB a escala lineal.
 
 \begin{lstlisting}[style=CodigoCPP]
 double dbToLinear(double db_value) {
@@ -533,8 +532,8 @@ std::vector<uint16_t> Channel::applyAWGNHardDecision(const std::vector<uint16_t>
 \subsection{Decisiones de diseño y uso}
 
 \begin{itemize}
-  \item \textbf{Separación de responsabilidades}: el canal ofrece modelos de canal (BSC, AWGN) como funciones independientes, facilitando su comparación experimental.
-  \item \textbf{Reproducibilidad}: la semilla de \texttt{rng} se extrae de \texttt{random\_device} por defecto; para tests reproducibles puede sustituirse por una semilla fija.
+    \item \textbf{Separación de responsabilidades}: el canal ofrece modelos de canal (BSC, AWGN) como funciones independientes, facilitando su comparación experimental.
+    \item \textbf{Reproducibilidad}: la semilla de \texttt{rng} se extrae de \texttt{random\_device} por defecto; para tests reproducibles puede sustituirse por una semilla fija.
 \end{itemize}
 
 \section{Arquitectura del Simulador y Motor de Ejecución}
@@ -595,8 +594,8 @@ El diseño concurrente del bucle principal se centra en torno a tres decisiones 
 \subsection{Decisiones de Diseño Adicionales}
 
 \begin{itemize}
-    \item \textbf{Inyección de Tráfico Real}: Además del generador pseudoaleatorio, el simulador permite inyectar archivos binarios reales (\textit{files}) como fuente de datos. Esto no solo valida la total transparencia del sistema ante cualquier secuencia de bits, sino que permite extraer archivos corruptos post-simulación para analizar cualitativamente el impacto de los errores residuales (por ejemplo, evaluando la degradación visual en archivos de imagen). 
-    \item \textbf{Gestión Eficiente de Memoria}: Para evitar cuellos de botella en la memoria RAM al cargar estos archivos de gran tamaño, se emplea la librería estándar \texttt{<filesystem>} (introducida en C++17) para pre-calcular el tamaño exacto del archivo en bytes. Esto permite realizar una reserva de memoria estática (\texttt{reserve}) de un solo golpe antes de iniciar la lectura binaria. Además, la escritura de los bits corregidos por parte de los hilos de OpenMP se realiza de forma quirúrgica calculando índices de memoria directos (\texttt{base\_index}), eludiendo el uso de secciones críticas que paralizarían la ejecución paralela.
+    \item \textbf{Inyección de Tráfico Real en Paralelo}: Además del generador pseudoaleatorio, el simulador permite usar archivos binarios reales como fuente de datos (\texttt{processFile}), donde procesa la totalidad del archivo como un flujo binario en crudo, sometiendo tanto las cabeceras de formato como la carga útil al canal AWGN. Este módulo también ha sido paralelizado con OpenMP, instanciando modelos de canal independientes por hilo (\textit{Thread-Local Storage}) para preservar la aleatoriedad del ruido, consiguiendo procesar y recuperar archivos de varios megabytes poco tiempo.
+    \item \textbf{Gestión Eficiente de Memoria}: Para evitar cuellos de botella en la memoria RAM al cargar estos archivos, se emplea la librería estándar \texttt{<filesystem>} (C++17) para calcular el tamaño exacto del archivo. Esto permite realizar una reserva de memoria estática (\texttt{reserve}) antes de iniciar la lectura y escritura. La escritura de los bits corregidos por los hilos de OpenMP se realiza utilizando índices de memoria directos (\texttt{base\_index}), evitando el uso de secciones críticas que penalizarían la ejecución concurrente.
     \item \textbf{Métricas de Latencia}: La recolección de los tiempos de codificación y decodificación (\texttt{avg\_enc\_us}, \texttt{avg\_dec\_us}) se realiza mediante la librería \texttt{<chrono>}.
-    \item \textbf{Exportación}: Todas las métricas se vuelcan automáticamente en formato \texttt{CSV}, permitiendo su uso directo en herramientas de postprocesado como Python (Matplotlib/Pandas) para la generación de las curvas de rendimiento abordadas en el siguiente capítulo.
+    \item \textbf{Exportación}: Todas las métricas se vuelcan automáticamente en formato \texttt{CSV}, permitiendo su uso directo en herramientas de postprocesado analítico.
 \end{itemize}

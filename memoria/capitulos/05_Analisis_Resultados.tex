@@ -159,3 +159,67 @@ Los resultados experimentales demuestran que añadir redundancia no produce el m
 Los resultados obtenidos en los diferentes escenarios evidencian que el beneficio de incrementar la redundancia está condicionado por la longitud del bloque del código. En estructuras de bloques cortos ($m=5$), las curvas se solapan y añadir más paridad no aporta una ganancia apreciable frente al ruido. En cambio, en bloques intermedios ($m=7$) y largos ($m=11$), un exceso de bits de paridad penaliza severamente el rendimiento en canales degradados, requiriendo superar un umbral crítico de relación señal-ruido para activar su potencial de corrección en cascada.
 
 En consecuencia, las simulaciones certifican la inexistencia de una solución universal y permiten definir criterios de diseño claros: si el sistema opera con restricciones de tamaño de bloque corto, la configuración de tasa media representa el compromiso óptimo, al igualar el rendimiento de la tasa baja sin penalizar la velocidad de transmisión. Por el contrario, si se implementan bloques largos en canales donde se garantiza superar los 5 dB, las configuraciones de alta tasa son las más eficientes, ya que logran la convergencia a error cero en el mismo umbral que las demás pero maximizando la tasa de transferencia de datos útiles.
+
+\section{Evaluación del Rendimiento Computacional}
+\label{sec:rendimiento_computacional}
+
+La viabilidad práctica de un código corrector de errores no depende únicamente de su capacidad de corrección estadística, evaluada mediante métricas como BER y CWER, sino también de su coste computacional y de su latencia de procesamiento. Un sistema con excelentes prestaciones de corrección puede perder aplicabilidad práctica si el tiempo necesario para codificar o decodificar cada bloque resulta excesivo.
+
+\subsection{Evolución de la latencia frente al estado del canal}
+Con el objetivo de analizar este comportamiento, se ha evaluado una configuración BCH con parámetros $m=7$ y $t=10$, registrando el tiempo medio de procesamiento por palabra de código frente a distintos niveles de degradación del canal AWGN (Figura \ref{fig:latencia_m7_t10}).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{../graficos/grafica_latencia_m7_t10.pdf}
+    \caption{Coste computacional (eje izquierdo) frente al rendimiento del canal (eje derecho) para $m=7, t=10$.}
+    \label{fig:latencia_m7_t10}
+\end{figure}
+
+Los resultados muestran un comportamiento claramente diferenciado entre los módulos de codificación y decodificación:
+
+\begin{itemize}
+
+    \item \textbf{Estabilidad en la codificación:}  
+    La latencia de codificación (línea verde discontinua) permanece reducida y relativamente estable a lo largo de todo el rango de $E_b/N_0$, manteniéndose generalmente por debajo de los $5\,\mu s$. Aunque se observa un incremento puntual cercano a $1\,\text{dB}$, el comportamiento global confirma que el codificador apenas se ve afectado por las condiciones del canal, ya que siempre ejecuta la misma secuencia de operaciones. Además, el uso de la estructura \texttt{PackedBit} permite realizar operaciones XOR y desplazamientos sobre palabras de 64 bits, reduciendo significativamente el coste de la división polinómica binaria.
+    \item \textbf{Dependencia de la decodificación respecto al canal:}  
+    En contraste, la latencia de decodificación (línea roja continua) muestra una dependencia significativa del estado del canal. En condiciones de ruido elevado ($0\,\text{dB}$), el tiempo de ejecución ya resulta considerable debido a la elevada cantidad de errores presentes en cada bloque. Posteriormente, el sistema alcanza su máxima carga de trabajo en torno a $2\,\text{dB}$, donde la latencia supera los $35\,\mu s$. Esta región representa el escenario más exigente para el decodificador, ya que el algoritmo debe completar íntegramente las fases de cálculo de síndromes, Berlekamp--Massey y búsqueda de Chien antes de localizar las posiciones erróneas.
+
+    \item \textbf{Disminución progresiva de la latencia:}  
+    A medida que mejora la relación señal a ruido, la latencia de decodificación disminuye progresivamente hasta estabilizarse por debajo de los $15\,\mu s$ para valores elevados de $E_b/N_0$. Este comportamiento pone de manifiesto la eficacia del mecanismo de finalización anticipada implementado en el decodificador: cuando el vector de síndromes resulta nulo, el sistema evita ejecutar los posteriores algoritmos, reduciendo considerablemente el número de operaciones necesarias.
+
+    \item \textbf{Relación entre BER y coste computacional:}  
+    Además, la curva BER codificada presenta el comportamiento en cascada (\textit{waterfall effect}) característico de los códigos BCH. A partir de aproximadamente $4\,\text{dB}$, la tasa de error desciende varios órdenes de magnitud de forma abrupta, coincidiendo con la reducción observada en la latencia de decodificación. Esto indica que, bajo condiciones de canal favorables, el sistema no solo mejora su capacidad de corrección, sino también su eficiencia computacional.
+
+\end{itemize}
+
+\subsection{Impacto de la complejidad estructural del código}
+
+Una vez analizado el impacto de las condiciones del canal sobre la latencia, se estudia ahora la influencia de la complejidad intrínseca del código BCH. En este caso, se mantiene fijo el canal AWGN y se varían los parámetros estructurales del código ($m$ y $t$), con el objetivo de evaluar su efecto sobre el coste computacional de los procesos de codificación y decodificación.
+
+Los resultados, representados mediante el diagrama de barras agrupadas de la Figura \ref{fig:complejidad_m7}, muestran una clara asimetría entre los procesos de transmisión y recepción:
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{../graficos/grafica_complejidad_m7.pdf}
+    \caption{Comparativa de la latencia computacional en función de la capacidad correctora $t$ para $m=7$ a $3\,\text{dB}$.}
+    \label{fig:complejidad_m7}
+\end{figure}
+
+\begin{itemize}
+
+    \item \textbf{Codificación constante respecto a $t$:}  
+    Como se observa en la gráfica, independientemente del número de bits de paridad introducidos (desde $R=0.94$ hasta $R=0.17$), el tiempo de codificación se mantiene prácticamente invariable, oscilando entre $1.1$ y $1.2\,\mu s$. Este comportamiento se explica porque la implementación basada en \texttt{PackedBit} realiza operaciones sobre palabras de 64 bits y el coste depende principalmente de la longitud del bloque $n$, que permanece constante en este estudio. Por tanto, la complejidad es independiente de $t$, aunque no estrictamente constante en términos absolutos.
+
+    \item \textbf{Incremento de la latencia de decodificación con $t$:}  
+    En contraste, la latencia de decodificación aumenta de forma significativa a medida que crece la capacidad correctora. Para $t=1$ la latencia es de aproximadamente $1.9\,\mu s$, mientras que para $t=15$ alcanza los $17.5\,\mu s$, lo que supone un incremento de casi un orden de magnitud. Este comportamiento es coherente con la complejidad de los algoritmos implicados:
+    
+    \begin{enumerate}
+        \item El cálculo de síndromes depende del número de errores corregibles y escala proporcionalmente con $n$ y $2t$.
+        \item El algoritmo de Berlekamp–Massey presenta una complejidad aproximada de $O(t^2)$ debido al crecimiento del polinomio localizador de errores.
+        \item La búsqueda de raíces mediante el algoritmo de Chien requiere evaluar el polinomio localizador a lo largo de los $n$ elementos del cuerpo, lo que introduce una complejidad del orden de $O(n \cdot t)$.
+    \end{enumerate}
+
+\end{itemize}
+
+En conclusión, los resultados evidencian un compromiso de diseño claro: aumentar la capacidad correctora $t$ no solo reduce la tasa de código $R$, sino que incrementa de forma significativa el coste computacional del receptor. Este factor resulta especialmente relevante en aplicaciones donde la eficiencia energética o la latencia del sistema son restricciones críticas.
+

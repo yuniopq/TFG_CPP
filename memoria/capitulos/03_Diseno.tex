@@ -50,7 +50,7 @@ El simulador sigue un esquema de procesamiento paralelo por palabra código, apr
 
 A diferencia de un enfoque secuencial, el diseño distribuye la carga de trabajo mediante \textbf{OpenMP}, donde cada hilo ejecuta de forma autónoma el ciclo completo: generación del mensaje → codificación → paso por el canal → decodificación → recolección de errores.
 
-En la Figura \ref{fig:diagrama_flujo_paralelo} se muestra este flujo paralelo. La configuración global (\texttt{SimulationConfig}) inicializa las tablas estáticas del Cuerpo de Galois una única vez. Posteriormente, el \texttt{BCH\_Simulator} lanza un pool de hilos que ejecutan de manera independiente el pipeline de simulación. Los resultados se sincronizan al final para calcular las métricas agregadas (BER, CWER, tiempos, etc.).
+En la Figura \ref{fig:diagrama_flujo_paralelo} se muestra este flujo paralelo. La configuración global inicializa las tablas estáticas del Cuerpo de Galois una única vez. Posteriormente, el \texttt{BCH\_Simulator} lanza un pool de hilos que ejecutan de manera independiente el pipeline de simulación. Los resultados se sincronizan al final para calcular las métricas agregadas (BER, CWER, tiempos, etc.).
 \begin{figure}[h]
     \centering
     \shorthandoff{>}
@@ -146,7 +146,7 @@ La clase \texttt{GaloisField} constituye el fundamento algebraico del simulador.
 
 \subsubsection{Clase \texttt{Polynomial}}
 
-Representa polinomios sobre $GF(2^m)$. Los coeficientes se almacenan en un \texttt{vector<uint16\_t>}, donde el índice corresponde al grado del monomio.
+Representa polinomios sobre $GF(2^m)$. Se usan \texttt{vector<uint16\_t>} para almacenar los coeficientes, donde el índice corresponde al grado del monomio.
 
 \begin{itemize}
     \item Métodos principales: \texttt{add()}, \texttt{multiply()}, \texttt{evaluate()} y \texttt{trim()}.
@@ -229,14 +229,11 @@ A continuación se detallan las clases principales:
 
 \subsubsection{Clase \texttt{BCH\_Simulator}}
 
-Es el orquestador principal del simulador. Gestiona:
-
+Es el orquestador principal del simulador. Su diseño separa la ejecución en dos flujos de trabajo gestionados por el método \texttt{run()}:
 \begin{itemize}
-    \item La configuración de la simulación (\texttt{SimulationConfig}).
-    \item La ejecución de simulaciones Monte Carlo para diferentes valores de $E_b/N_0$.
-    \item La paralelización con \textbf{OpenMP} (planificación dinámica).
-    \item Criterios de parada inteligentes: mínimo número de \textit{codewords} erróneas o máximo número de iteraciones.    \item La recolección de métricas (BER, BER uncoded, CWER y tiempos de codificación/decodificación).
-    \item La exportación de resultados a formato CSV.
+    \item \textbf{Flujo Matemático (\texttt{simulatePoint}):} Dedicado exclusivamente a las simulaciones de Montecarlo. Emplea paralelización mediante OpenMP para evaluar el rendimiento estadístico del código frente a canales AWGN y recolectar métricas cuantitativas (BER, CWER, latencias).
+    \item \textbf{Flujo Cualitativo (\texttt{processFile}):} Orientado a la demostración práctica con archivos reales. Este flujo también ha sido diseñado para operar en paralelo mediante OpenMP, procesando la totalidad del archivo como un flujo de datos en crudo para evaluar la robustez del código frente a la corrupción de la información.
+    \item \textbf{Gestión de configuración y exportación:} Controla los criterios de parada, la orquestación del generador de pseudoaleatorios y la exportación de resultados a formato CSV.
 \end{itemize}
 
 \subsection{Decisiones de Diseño y Optimizaciones}

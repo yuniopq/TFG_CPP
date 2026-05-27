@@ -153,41 +153,41 @@ void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db
     double rate = (double)k / bch.getN();
     double esno_db = ebno_db + 10.0 * log10(rate);
     
+    // Hacemos el reserve estático de memoria antes de abrir los hilos
     out_corrected.resize(file_bits.size(), 0);
     out_noisy.resize(file_bits.size(), 0);
     
     long num_blocks = file_bits.size() / k;
     
-    for (long iter = 0; iter < num_blocks; ++iter) {
-        size_t base_index = iter * k;
+    #pragma omp parallel
+    {
+        // Aislamiento local para evitar condiciones de carrera
+        BCH_Codec local_bch = bch;
+        Channel local_channel; // Al instanciar uno nuevo, coge su propia semilla del SO
         
-        std::vector<uint16_t> message(k);
-        for (int i = 0; i < k; i++) message[i] = file_bits[base_index + i];
-        
-        // ¡Magia! Si estamos en los primeros 54 bytes (cabecera BMP), no aplicamos ruido
-        if (base_index < 432) {
+        #pragma omp for schedule(dynamic)
+        for (long iter = 0; iter < num_blocks; ++iter) {
+            size_t base_index = iter * k;
+            
+            std::vector<uint16_t> message(k);
+            for (int i = 0; i < k; i++) message[i] = file_bits[base_index + i];
+            
+            // Flujo normal para todo el archivo
+            std::vector<uint16_t> encoded = local_bch.encode(message);
+            std::vector<uint16_t> noisy = local_channel.applyAWGNHardDecision(encoded, esno_db);
+            std::vector<uint16_t> noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
+            
+            std::vector<uint16_t> decoded;
+            local_bch.decode(noisy, decoded);
+            
+            // Cada hilo escribe en su propio "trozo" del vector
             for (int i = 0; i < k; i++) {
-                out_corrected[base_index + i] = message[i];
-                out_noisy[base_index + i] = message[i];
+                out_corrected[base_index + i] = decoded[i];
+                out_noisy[base_index + i] = noisy_uncoded[i];
             }
-            continue;
-        }
-        
-        // Flujo normal para los píxeles
-        std::vector<uint16_t> encoded = bch.encode(message);
-        std::vector<uint16_t> noisy = channel.applyAWGNHardDecision(encoded, esno_db);
-        std::vector<uint16_t> noisy_uncoded = channel.applyAWGNHardDecision(message, ebno_db);
-        
-        std::vector<uint16_t> decoded;
-        bch.decode(noisy, decoded);
-        
-        for (int i = 0; i < k; i++) {
-            out_corrected[base_index + i] = decoded[i];
-            out_noisy[base_index + i] = noisy_uncoded[i];
         }
     }
 }
-
 // Auxiliary methods moved from main into the class
 int BCH_Simulator::getDefaultPrimitivePoly(int m) {
     switch (m) {
