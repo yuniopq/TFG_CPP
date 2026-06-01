@@ -191,19 +191,19 @@ void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db
 // Auxiliary methods moved from main into the class
 int BCH_Simulator::getDefaultPrimitivePoly(int m) {
     switch (m) {
-        case 3:  return 0b1011;
-        case 4:  return 0b10011;
-        case 5:  return 0b100101;
-        case 6:  return 0b1000011;
-        case 7:  return 0b10001001;
-        case 8:  return 0b100011101;
-        case 9:  return 0b1000010001;
-        case 10: return 0b10000001001;
-        case 11: return 0b100000000101;
-        case 12: return 0b1000001010011;
-        case 13: return 0b10000000011011;
-        case 14: return 0b100010000000011;
-        case 15: return 0b1000000000000011;
+        case 3:  return 0x0B;
+        case 4:  return 0x13;
+        case 5:  return 0x25;
+        case 6:  return 0x43;
+        case 7:  return 0x83;   
+        case 8:  return 0x11D;
+        case 9:  return 0x211;
+        case 10: return 0x409;
+        case 11: return 0x805;
+        case 12: return 0x1053;
+        case 13: return 0x201B;
+        case 14: return 0x402B;
+        case 15: return 0x8003;
         default: return 0;
     }
 }
