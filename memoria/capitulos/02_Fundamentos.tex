@@ -5,9 +5,9 @@ En este capítulo se presentan los fundamentos matemáticos necesarios para comp
 
 \section{Introducción a la Codificación de Canal}
 
-El objetivo principal de un sistema de comunicación es transmitir información desde un emisor hasta un receptor con la mayor fidelidad posible. Sin embargo, durante la transmisión pueden aparecer errores debido al ruido y a las perturbaciones presentes en el canal de comunicación.
+El problema fundamental en toda comunicación digital consiste en recuperar de manera fiable una secuencia de información (el mensaje) que ha sido enviada a través de un canal físico propenso a alteraciones \cite{artes2012comunicaciones}. En el modelo clásico de comunicaciones, este proceso se divide en tres etapas: un transmisor que codifica y adapta la señal, un canal que inevitablemente introduce perturbaciones (como ruido aditivo), y un receptor cuya misión es estimar el mensaje original intentando minimizar la probabilidad de error \cite{artes2012comunicaciones}.
 
-Para reducir estos errores, los sistemas de codificación añaden redundancia a la información original. Gracias a esta redundancia, el receptor puede detectar e incluso corregir determinados errores producidos durante la transmisión.
+Para reducir esta tasa de errores frente a la hostilidad del canal, los sistemas de codificación añaden redundancia estructural a la información original.
 
 En los códigos de bloque, la información se divide en bloques de $k$ bits. Posteriormente, el codificador añade $n-k$ bits de paridad, obteniendo palabras de código de longitud $n$. Este tipo de codificación se representa mediante la notación $(n,k)$.
 
@@ -159,7 +159,7 @@ La teoría de códigos utiliza operaciones algebraicas definidas sobre cuerpos f
 \subsection{Construcción de $GF(2^m)$}
 \label{subsec:polinomio_primitivo}
 
-Mientras que $GF(2)$ es suficiente para trabajar con bits individuales, los códigos BCH requieren operar con símbolos más complejos. Para ello se utilizan los cuerpos de extensión $GF(2^m)$, que contienen exactamente $2^m$ elementos.
+Mientras que $GF(2)$ es suficiente para trabajar con bits individuales, los códigos BCH requieren operar con símbolos más complejos. Para ello se utilizan los cuerpos de extensión $GF(2^m)$, que contienen exactamente $2^m$ elementos~\cite{lin2004error}.
 
 La construcción de $GF(2^m)$ requiere definir un \textbf{polinomio primitivo} de grado $m$ sobre $GF(2)$.
 
@@ -178,12 +178,11 @@ Gracias a esta construcción, los elementos de $GF(2^m)$ pueden representarse de
     \item \textbf{Representación polinómica}: útil para sumas y restas.
 \end{itemize}
 
-Cuando una operación genera términos de grado superior o igual a $m$, el resultado debe reducirse módulo el polinomio primitivo.
+Cuando una operación genera términos de grado superior o igual a $m$, el resultado debe reducirse módulo el polinomio primitivo. Para garantizar la correcta estructura algebraica en el desarrollo de este simulador, los polinomios primitivos empleados han sido extraídos directamente de las tablas de referencia propuestas por Artés Rodríguez et al.~\cite{artes2012comunicaciones}.
 
-Por ejemplo, para construir el cuerpo $GF(2^7)$ puede utilizarse el polinomio:
-
+Por ejemplo, para construir el cuerpo $GF(2^7)$ utilizado en las simulaciones de bloques intermedios, se emplea el polinomio primitivo especificado en dicha literatura:
 $$
-p(x)=x^7+x^3+1
+p_7(x)=x^7+x+1
 $$
 
 Esta estructura matemática permite implementar de forma eficiente las tablas de logaritmos y exponenciales utilizadas durante la codificación y decodificación BCH.
@@ -213,7 +212,7 @@ Estas operaciones se realizan módulo $2^m-1$, que corresponde al número de ele
 \section{Fundamentos de los Códigos BCH}
 \label{sec:fundamentos_bch}
 
-Los códigos Bose--Chaudhuri--Hocquenghem (BCH) son una clase de códigos cíclicos que permiten ajustar de forma parametrizable su capacidad de corrección de errores.
+Los códigos Bose--Chaudhuri--Hocquenghem (BCH) son una clase de códigos cíclicos que permiten ajustar de forma parametrizable su capacidad de corrección de errores~\cite{lin2004error}.
 
 Para un entero positivo \(m \geq 3\), se define la longitud del código como:
 \[
@@ -335,7 +334,7 @@ Esta demostración prueba que cualquier síndrome $S_j$ puede expresarse como un
 
 \subsection{Algoritmo de Berlekamp-Massey}
 
-El algoritmo de Berlekamp-Massey es un método iterativo para resolver la recurrencia lineal descrita anteriormente. Su objetivo es determinar el polinomio localizador $\sigma(x)$ de menor grado $L$ que genera exactamente la secuencia de síndromes $S_1, S_2, \dots, S_{2t}$.
+El algoritmo de Berlekamp-Massey es un método iterativo para resolver la recurrencia lineal descrita anteriormente~\cite{lin2004error}. Su objetivo es determinar el polinomio localizador $\sigma(x)$ de menor grado $L$ que genera exactamente la secuencia de síndromes $S_1, S_2, \dots, S_{2t}$.
 
 Para su descripción se definen las siguientes variables:
 \begin{itemize}
@@ -395,13 +394,15 @@ De esta forma, la evaluación del polinomio puede actualizarse de manera increme
 \section{Modelado Matemático del Canal}
 \label{sec:modelo_canal}
 
-Para evaluar el rendimiento del sistema de codificación y decodificación, la transmisión física se modela mediante un canal con ruido blanco gaussiano aditivo (AWGN) y modulación binaria antipodal BPSK.
+Para evaluar el rendimiento del sistema de codificación y decodificación, la transmisión física se modela mediante un canal de ruido blanco gaussiano aditivo (AWGN) y modulación binaria BPSK. Este modelo es el estándar en telecomunicaciones porque simula de forma muy realista el ruido térmico que generan los propios circuitos electrónicos del receptor. Matemáticamente, al ser el resultado de sumar millones de diminutas alteraciones aleatorias, este ruido adopta una distribución de Gauss. Además, se le denomina "blanco" porque su energía se reparte por igual en todas las frecuencias de transmisión, sumándose y alterando nuestra señal original \cite{artes2012comunicaciones}.
 
-En este esquema, cada bit codificado \(c_i \in \{0,1\}\) se transforma en un símbolo:
+Aunque el simulador opera a nivel lógico (procesando secuencias de bits), es necesario justificar su conexión con la transmisión física real. En un entorno físico, los bits (0s y 1s) no pueden emitirse directamente por una antena porque requieren frecuencias muy bajas que causarían interferencias y necesitarían antenas de tamaño inviable. Para solucionar esto, los sistemas reales utilizan una onda de alta frecuencia (portadora) cuya fase se modifica según el bit enviado, una técnica conocida como BPSK (\textit{Binary Phase Shift Keying}).
+
+Para que nuestro simulador sea eficiente sin perder rigor, no necesitamos recrear la complejidad de esas ondas analógicas de alta frecuencia. En su lugar, el simulador emplea una representación matemática estándar donde los bits se mapean a dos niveles de señal opuestos. De esta forma, el efecto físico del ruido sobre la transmisión se simplifica a la adición de una variable aleatoria gaussiana sobre estos niveles. Así, cada bit codificado \(c_i \in \{0,1\}\) se representa mediante los valores numéricos:
 \[
 s_i \in \{+1,-1\},
 \]
-de forma que:
+asignando:
 \[
 0 \rightarrow +1,
 \qquad

@@ -75,7 +75,8 @@
 \fancyhead[R]{\textbf{\thepage}}
 \renewcommand{\chaptermark}[1]{\markboth{\textbf{#1}}{}}
 \renewcommand{\sectionmark}[1]{\markright{\textbf{\thesection. #1}}}
-
+\renewcommand{\lstlistingname}{Código}
+\renewcommand{\lstlistlistingname}{Índice de fragmentos de código}
 \newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
 
 % --- Definición de Teoremas ---
@@ -181,6 +182,7 @@
 \tableofcontents
 \listoffigures
 \listoftables
+\lstlistoflistings
 
 % --- Cuerpo del TFG ---
 \mainmatter
@@ -197,6 +199,7 @@
 % --- Bibliografía ---
 \backmatter
 \addcontentsline{toc}{chapter}{Bibliografía}
+\nocite{*}
 \bibliographystyle{unsrt} 
 \bibliography{bibliografia/bibliografia}
 

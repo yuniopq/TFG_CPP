@@ -6,34 +6,53 @@ En este capítulo se presentan los aspectos más relevantes de la implementació
 \section{Implementación del Cuerpo de Galois}
 \label{sec:galois_field}
 
-% (Se omiten los fundamentos matemáticos aquí; ver el capítulo de Fundamentos Matemáticos)
-\subsection{Estructura de Datos}
+\subsection{Diseño de datos y gestión de memoria}
+El componente \texttt{GaloisField} soporta toda la carga aritmética del sistema. Debido a que las simulaciones de Montecarlo paralelizadas implican la instanciación concurrente de miles de estos objetos, su gestión de memoria ha sido diseñada para minimizar el consumo de recursos del sistema.
 
-\subsubsection{Atributos Estáticos}
+Para lograrlo, las tablas de exponenciales y logaritmos se han declarado como atributos de clase (\texttt{static}), de modo que se comparten y no pertenecen a cada instancia individual:
 
-La clase \texttt{GaloisField} utiliza atributos estáticos para compartir las tablas de precálculo entre todas las instancias del mismo cuerpo:
-
-\begin{lstlisting}[style=CodigoCPP]
-static vector<uint16_t> log_table;      // Tabla de logaritmos
-static vector<uint16_t> exp_table;      // Tabla de exponentes
-static int initialized_m;               // m del ultimo cuerpo inicializado
+\begin{lstlisting}[style=CodigoCPP, caption={Declaración de los atributos estáticos para el precálculo compartido.}, label={lst:gf_atributos_estaticos}]
+static vector<uint16_t> log_table;
+static vector<uint16_t> exp_table;
+static int initialized_m; 
 \end{lstlisting}
 
-Esta estrategia reduce el consumo de memoria y las operaciones redundantes cuando se crean múltiples instancias del mismo cuerpo.
-
-\subsubsection{Atributos de Instancia}
-
-\begin{lstlisting}[style=CodigoCPP]
-int m;                      // Grado del cuerpo
-int size;                   // Numero de elementos (2^m)
-int primitive_poly;         // Polinomio primitivo
-\end{lstlisting}
+Esta decisión de diseño ofrece dos ventajas principales:
+\begin{itemize}
+    \item \textbf{Cálculo único:} Las tablas se generan una sola vez, independientemente de los hilos que instancien el cuerpo finito (por ejemplo, al usar OpenMP). La variable \texttt{initialized\_m} asegura que no se repitan cálculos de forma innecesaria.
+    \item \textbf{Uso eficiente de la memoria caché:} Usar \texttt{vector<uint16\_t>} mejora la localidad de los datos al almacenar los elementos de forma contigua. Para $m\leq15$, estas tablas ocupan como máximo $\approx$ 192 KB, un tamaño que normalmente cabe por completo en la caché L2 de procesadores modernos. Esto reduce los fallos de caché y acelera el acceso a los datos durante la simulación.
+\end{itemize}
 
 \subsection{Inicialización y Precálculo}
 
-El constructor inicializa el cuerpo y genera las tablas de logaritmos y exponentes:
+Como se fundamentó en el Capítulo~\ref{cap:fundamentos}, la inicialización del cuerpo finito requiere un polinomio primitivo válido. Basándonos en la parametrización estándar de la literatura~\cite{artes2012comunicaciones}, la Tabla~\ref{tab:polinomios_primitivos} detalla los polinomios implementados en el simulador para los grados soportados ($m \in [3, 15]$). 
 
-\begin{lstlisting}[style=CodigoCPP]
+Para su uso en el constructor de la clase \texttt{GaloisField}, estos polinomios se han traducido a su representación hexadecimal compacta (\texttt{primitive\_poly}), mapeando cada coeficiente del monomio $x^i$ al bit $i$-ésimo de un entero sin signo.
+
+\begin{table}[h!]
+\centering
+\caption{Polinomios primitivos extraídos de \cite{artes2012comunicaciones} y su correspondiente parametrización hexadecimal en C++.}
+\label{tab:polinomios_primitivos}
+\begin{tabular}{clc}
+\hline
+\textbf{Grado ($m$)} & \textbf{Polinomio Primitivo $p_m(x)$} & \textbf{Valor Hexadecimal} \\ \hline
+3 & $x^3 + x + 1$ & \texttt{0x0B} \\
+4 & $x^4 + x + 1$ & \texttt{0x13} \\
+5 & $x^5 + x^2 + 1$ & \texttt{0x25} \\
+6 & $x^6 + x + 1$ & \texttt{0x43} \\
+7 & $x^7 + x + 1$ & \texttt{0x83} \\
+8 & $x^8 + x^4 + x^3 + x^2 + 1$ & \texttt{0x11D} \\
+9 & $x^9 + x^4 + 1$ & \texttt{0x211} \\
+10 & $x^{10} + x^3 + 1$ & \texttt{0x409} \\
+11 & $x^{11} + x^2 + 1$ & \texttt{0x805} \\
+12 & $x^{12} + x^6 + x^4 + x + 1$ & \texttt{0x1053} \\
+13 & $x^{13} + x^4 + x^3 + x + 1$ & \texttt{0x201B} \\
+14 & $x^{14} + x^5 + x^3 + x + 1$ & \texttt{0x402B} \\
+15 & $x^{15} + x + 1$ & \texttt{0x8003} \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}[style=CodigoCPP, caption={Implementación del constructor de \texttt{GaloisField} y generación de las tablas exponencial y logarítmica.}, label={lst:gf_constructor}]
 GaloisField::GaloisField(int m, int primitive_poly) 
     : m(m), size(0), primitive_poly(primitive_poly) {
     if (m < 1 || m > 15) {
@@ -68,6 +87,17 @@ GaloisField::GaloisField(int m, int primitive_poly)
 }
 \end{lstlisting}
 
+El flujo de ejecución de este constructor se divide en tres fases:
+
+\begin{enumerate}
+    \item \textbf{Validación temprana:} Se garantiza que el grado $m$ se encuentre en el rango soportado $m \in [1, 15]$. El límite superior es establecido por el uso de tipo \texttt{uint16\_t}, cuyo valor máximo es $2^{16}-1$.
+    
+    \item \textbf{Cálculo de dimensiones:} El número de elementos del cuerpo ($2^m$) se calcula mediante un desplazamiento de bits a la izquierda (\texttt{$1 << m$}). Esta operación de la CPU es órdenes de magnitud más rápida que invocar funciones matemáticas estándar como \texttt{std::pow}.
+    
+    \item \textbf{Generación de tablas:} Si el cuerpo no ha sido inicializado previamente, se procede a poblar las tablas. El valor actual se multiplica por la raíz primitiva $\alpha$ aplicando un desplazamiento a la izquierda (\texttt{val <{}<= 1}). Si el bit más significativo se desborda (\texttt{val \& size}), se aplica una operación XOR con el polinomio primitivo (\texttt{val \textasciicircum{}= primitive\_poly}), asegurando que el elemento permanezca dentro del cuerpo finito.
+\end{enumerate}
+
+
 \subsection{Operaciones Aritméticas}
 
 Dado que las tablas exponencial (\texttt{exp\_table}) y logarítmica (\texttt{log\_table}) se calculan durante la inicialización, las operaciones aritméticas se resuelven en tiempo constante $O(1)$ mediante accesos a memoria, evitando cálculos algebraicos complejos durante la simulación.
@@ -81,7 +111,8 @@ Utiliza la propiedad de los logaritmos en cuerpos finitos:
 a \cdot b = \alpha^{\log(a)} \cdot \alpha^{\log(b)} = \alpha^{\log(a) + \log(b)}
 \end{equation}
 A nivel de código, tras validar que ningún operando sea cero, esto se traduce en una única línea de C++:
-\begin{lstlisting}[style=CodigoCPP]
+
+\begin{lstlisting}[style=CodigoCPP, caption={Resolución en $O(1)$ de la multiplicación en el cuerpo finito mediante acceso a tablas precalculadas.}, label={lst:gf_multiplicacion}]
 return exp_table[log_table[a] + log_table[b]];
 \end{lstlisting}
 Al haber duplicado la tabla de exponentes en memoria durante la inicialización, se evita la costosa operación módulo $(2^m - 1)$ en cada ciclo de reloj.
@@ -95,7 +126,7 @@ De forma análoga, la división se calcula restando los logaritmos:
 
 En C++, se suma el tamaño máximo del cuerpo para garantizar que el índice sea siempre positivo sin necesidad de usar operaciones condicionales condicionales de salto:
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Cálculo de la división en el cuerpo finito utilizando sumas de índices logarítmicos.}, label={lst:gf_division}]
 return exp_table[log_table[a] - log_table[b] + (size - 1)];
 \end{lstlisting}
 
@@ -116,7 +147,7 @@ El uso de tablas estáticas proporciona las siguientes ventajas:
 Para las operaciones aritméticas críticas (multiply, divide, power, inverse), la validación de los operandos se realiza mediante assert. Esta decisión de diseño se fundamenta en el rendimiento: al compilar el simulador en modo NDEBUG, el preprocesador elimina las aserciones, asegurando que no exista ninguna penalización (overhead) en tiempo de ejecución durante las simulaciones intensivas, mientras que mantiene la seguridad durante la fase de desarrollo y depuración.
 \subsection{Ejemplo de Uso}
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Ejemplo de inicialización y ejecución de operaciones aritméticas en el cuerpo de Galois $\text{GF}(2^4)$.}, label={lst:gf_ejemplo_uso}]
 // Crear un cuerpo GF(2^4) con polinomio primitivo 0x13
 GaloisField gf(4, 0x13);
 
@@ -138,7 +169,7 @@ uint16_t potencia = gf.power(a, 3);     // 5^3 = 10 (0b1010)
 
 La clase \texttt{Polynomial} representa polinomios con coeficientes en $\mathbb{GF}(2^m)$ usando:
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Atributos principales de la clase \texttt{Polynomial}: vector de coeficientes y referencia al cuerpo finito subyacente.}, label={lst:poly_atributos}]
 // coef[0] + coef[1]x + coef[2]x^2 + ...
 vector<uint16_t> coef;
 GaloisField gf; // cuerpo asociado
@@ -148,7 +179,7 @@ GaloisField gf; // cuerpo asociado
 
 \subsection{Constructor y normalización}
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Constructor de la clase \texttt{Polynomial} que inicializa los coeficientes y limpia términos nulos superiores.}, label={lst:poly_constructor}]
 Polynomial::Polynomial(const GaloisField &galoisField,const vector<uint16_t> &coefficients)
     : coef(coefficients), gf(galoisField) {
     trim();
@@ -159,7 +190,7 @@ Polynomial::Polynomial(const GaloisField &galoisField,const vector<uint16_t> &co
 
 \subsubsection{Acceso y modificación}
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Firma de los métodos básicos para el acceso y modificación de los coeficientes polinómicos.}, label={lst:poly_getters}]
 int Polynomial::getDegree() const { /* devuelve coef.size()-1 o -1 si vacio */ }
 uint16_t Polynomial::getCoef(int degree) const { /* devuelve 0 si fuera de rango */ }
 int Polynomial::setCoef(int degree, uint16_t value) { /* redimensiona y trim */ }
@@ -181,21 +212,34 @@ La clase implementa las operaciones algebraicas fundamentales operando intername
 
 \subsubsection{Trim y utilidades}
 
-\begin{lstlisting}[style=CodigoCPP]
+Los coeficientes se almacenan internamente en un \texttt{std::vector<uint16\_t>}, donde el índice del vector se corresponde con el grado del monomio ($a_i \cdot x^i$). Esta estructura dinámica requiere un mecanismo de normalización constante para garantizar la correctitud de las operaciones algebraicas. Para ello, se ha diseñado el método \texttt{trim()}:
+
+\begin{lstlisting}[style=CodigoCPP, caption={Implementación del método \texttt{trim()} para la eliminación de coeficientes nulos en los términos de mayor grado.}, label={lst:poly_trim}]
 void Polynomial::trim() {
     while (!coef.empty() && coef.back() == 0) coef.pop_back();
 }
 \end{lstlisting}
 
-\subsection{Decisiones de diseño}
+Este método se invoca tras cada modificación estructural del polinomio (como sumas o reasignaciones). Su función es eliminar los coeficientes nulos de mayor grado, asegurando que el tamaño del vector siempre refleje con exactitud el grado real del polinomio más uno ($\deg(P) = \texttt{size()} - 1$). Sin esta fase de normalización, algoritmos como la división polinómica o Berlekamp-Massey procesarían "grados fantasma", degradando el rendimiento computacional y provocando fallos lógicos en la decodificación.
 
+\subsection{Decisiones de diseño}
+Cabe destacar las decisiones tomadas en los algoritmos más críticos para el rendimiento del simulador:
 \begin{itemize}
-  \item Algoritmo de multiplicación simple: suficiente para los grados usados en este proyecto; alternativas (Karatsuba) solo si se requiere rendimiento en polinomios grandes.
-  \item Uso de \texttt{uint16\_t} para coeficientes acorde a \texttt{GaloisField} actual ($m\leq15$).
+    \item \textbf{Evaluación polinómica (Método de Horner):} La evaluación de polinomios en un elemento del cuerpo es una operación de altísima frecuencia, especialmente durante el cálculo de síndromes y la búsqueda de raíces de Chien. Se ha implementado el método de Horner para evitar el costoso cómputo explícito de potencias ($x^2, x^3, \dots$). Esta técnica factoriza el polinomio anidando las operaciones:
+    $$
+    P(x) = (\dots((a_n x + a_{n-1})x + a_{n-2})x + \dots )x + a_0
+    $$
+    Gracias a esta reorganización matemática, la evaluación de un polinomio de grado $n$ se resuelve estrictamente en $n$ multiplicaciones y $n$ sumas en el cuerpo finito, reduciendo radicalmente la complejidad asintótica y el tiempo de latencia general.
+
+    \item \textbf{Algoritmo de multiplicación simple:} Se ha optado por implementar el método tradicional de complejidad $O(n^2)$ en lugar de alternativas asintóticamente más eficientes, como el algoritmo de Karatsuba. Esta decisión de diseño se fundamenta en que la multiplicación polinómica se ejecuta una única vez durante la instanciación de la clase \texttt{BCH\_Codec} para computar el polinomio generador. Al no formar parte del bucle crítico de la simulación de Montecarlo, y operarse sobre grados limitados, optimizar este cálculo introduciría una complejidad estructural innecesaria sin aportar ninguna mejora real al rendimiento del sistema.
 \end{itemize}
 
 \section{Implementación de PackedBit}
 \label{sec:packedbit}
+
+La clase \texttt{PackedBit} representa una de las decisiones más críticas para el rendimiento. En una implementación algorítmica ingenua, una secuencia de bits o un polinomio binario se representaría mediante un contenedor estándar como \texttt{std::vector<uint16\_t>} (o \texttt{std::vector<bool>}). Sin embargo, este enfoque presenta un severo sobrecoste de memoria y obliga a procesar las operaciones algebraicas iterando coeficiente a coeficiente.
+
+Para resolver este cuello de botella, \texttt{PackedBit} empaqueta la secuencia lógica de bits lógica dentro de un vector de bloques continuos de 64 bits (\texttt{std::vector<uint64\_t>}). Al condensar la información, el procesador puede procesar hasta 64 coeficientes polinómicos en un solo ciclo de reloj, maximizando el rendimiento del hardware y minimizando los fallos de caché.
 
 \subsection{Estructura de datos}
 
@@ -206,7 +250,7 @@ En el contexto del codificador BCH, \texttt{PackedBit} se usa para representar t
 
 \subsection{Acceso y modificación de bits}
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Declaración de los métodos \texttt{get} y \texttt{set} para la manipulación individual de bits en la estructura \texttt{PackedBit}.}, label={lst:packedbit_get_set}]
 uint16_t get(size_t index) const;
 void set(size_t index, uint16_t value);
 \end{lstlisting}
@@ -218,9 +262,11 @@ La transición entre un elemento \texttt{std::vector\textless uint16\_t\textgrea
 
 \subsection{Desplazamiento y XOR combinado}
 
-La operación \texttt{xorShifted()} es la más importante para el codificador BCH, porque permite simular la resta polinómica mediante XOR del generador desplazado.
+En el contexto de la codificación sistemática BCH, la operación matemáticamente más costosa es calcular el resto de la división polinómica entre el mensaje extendido y el polinomio generador. Para evitar este pesado proceso, \texttt{PackedBit} implementa el método \texttt{xorShifted()}.
 
-\begin{lstlisting}[style=CodigoCPP]
+En lugar de crear objetos \texttt{Polynomial} y dividir paso a paso, este método aprovecha la representación empaquetada para simular la resta polinómica (que en $\mathbb{GF}(2)$ equivale lógicamente a la operación XOR) aplicando desplazamientos y máscaras a nivel de palabra completa.
+
+\begin{lstlisting}[style=CodigoCPP, caption={Implementación del método \texttt{xorShifted}, responsable de aplicar la operación XOR con un vector desplazado a nivel de bloques de 64 bits.}, label={lst:packedbit_xorshifted}]
 void xorShifted(const PackedBit &gx, size_t shift_bits) {
     if (shift_bits >= bitCount || gx.data.empty()) return;
 
@@ -251,6 +297,8 @@ void xorShifted(const PackedBit &gx, size_t shift_bits) {
 }
 \end{lstlisting}
 
+El mayor reto en esta función reside en la gestión de las fronteras entre bloques de memoria. Dado que un desplazamiento arbitrario (\texttt{shift\_bits}) rara vez es múltiplo exacto de 64, los bits desplazados que desbordan un bloque \texttt{uint64\_t} no pueden descartarse; deben preservarse y transferirse al inicio del siguiente bloque mediante una variable de acarreo (\texttt{carry}).
+
 \subsection{Decisiones de diseño}
 
 \begin{itemize}
@@ -262,8 +310,9 @@ void xorShifted(const PackedBit &gx, size_t shift_bits) {
 
 \subsection{Relación con BCH\_Codec}
 
-\texttt{PackedBit} no es solo una estructura auxiliar, sino la representación binaria que permite que \texttt{BCH\_Codec} realice la división del mensaje por el polinomio generador mediante desplazamientos y XOR sobre bloques de 64 bits. En otras palabras, convierte una operación algebraica sobre polinomios en una secuencia de operaciones bit a bit mucho más eficiente.
+Gracias a esta estructura, la clase \texttt{BCH\_Codec} transforma una operación matemática compleja en una secuencia de operaciones de muy bajo nivel optimizadas. 
 
+Esta manipulación de bits justifica los datos empíricos obtenidos en el análisis de resultados (Sección \ref{sec:rendimiento_computacional}): independientemente de la capacidad correctora $t$ o del nivel de ruido del canal, la latencia de la fase de codificación se mantiene extraordinariamente baja y estable en torno a $1\,\mu s$.
 \section{Implementación de \texttt{BCH\_Codec}}
 \label{sec:bch_codec}
 
@@ -273,7 +322,7 @@ En esta sección se presenta la implementación completa de la clase \texttt{BCH
 
 Los atributos relevantes de la clase \texttt{BCH\_Codec} son:
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Atributos principales de la clase \texttt{BCH\_Codec}, definiendo la geometría del código $(n, k, t)$ y su cuerpo de Galois asociado.}, label={lst:bch_atributos}]
 int m;                // Grado del cuerpo
 int t;                // Capacidad de correccion
 int n;                // Longitud del codigo (2^m - 1)
@@ -284,10 +333,13 @@ Polynomial generator; // Polinomio generador
 
 Además, la clase mantiene un método privado \texttt{computeGeneratorPolynomial()} encargado de construir el polinomio generador a partir de los polinomios mínimos necesarios para el BCH elegido.
 
-\subsection{Constructor y cálculo del generador}
+\subsection{Inicialización y Cálculo del Generador}
 
-El constructor comprueba que $1\le m\le 15$ y $1 \le 2t < n$. Una vez validados los parámetros, inicializa el cuerpo de Galois, calcula \texttt{n = $2^m - 1$} y determina \texttt{k} a partir del grado del polinomio generador. La función \texttt{computeGeneratorPolynomial()} es la encargada de construir el polinomio generador; para ello, recorre las raíces conjugadas y multiplica los polinomios mínimos correspondientes.
-\begin{lstlisting}[style=CodigoCPP]
+Durante la creación de un objeto \texttt{BCH\_Codec}, el constructor valida los parámetros del código ($n$, $k$ y $t$) y llama al método privado \texttt{computeGeneratorPolynomial()}.
+
+Este método es el responsable de construir el polinomio generador $g(x)$. Para ello, calcula las raíces conjugadas y multiplica sus respectivos polinomios mínimos iterativamente. Es fundamental destacar que esta operación, que requiere el uso intensivo de la multiplicación polinómica de complejidad $O(n^2)$, se ejecuta de forma estrictamente preliminar. Al precomputar el generador en el constructor, se elimina por completo la carga algebraica pesada de los bucles de simulación, garantizando que el estado del códec esté listo para procesar datos en tiempo real.
+
+\begin{lstlisting}[style=CodigoCPP, caption={Constructor de \texttt{BCH\_Codec} encargado de validar los parámetros de entrada y establecer las bases del cuerpo finito.}, label={lst:bch_constructor}]
 BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
     : m(m), t(t), gf(m, primitive_poly), generator(gf, {}) {
     if (m < 1 || m > 15) {
@@ -305,7 +357,7 @@ BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
 }
 \end{lstlisting}
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Lógica de cálculo del polinomio generador del código BCH mediante la agrupación de raíces conjugadas y polinomios mínimos.}, label={lst:bch_generator_poly}]
 void BCH_Codec::computeGeneratorPolynomial() {
     generator = Polynomial(gf, std::vector<uint16_t>{1});
     std::unordered_set<uint16_t> processed_exp;
@@ -330,7 +382,9 @@ void BCH_Codec::computeGeneratorPolynomial() {
 
 \subsection{Codificación sistemática (versión empaquetada)}
 
-La versión optimizada utilizada en el simulador convierte el mensaje y el generador en \texttt{PackedBit} y realiza la división polinómica mediante XOR desplazado. Esta codificación es sistemática: los bits de información se conservan y los bits de paridad se añaden al principio de la palabra de código.
+La codificación de un bloque de información requiere calcular el resto de la división del mensaje extendido entre el polinomio generador. Desde un punto de vista matemático, esto implicaría operar con objetos de la clase \texttt{Polynomial}. Sin embargo, esta aproximación penalizaría el rendimiento del sistema.
+
+Para resolverlo, el método \texttt{encode()} realiza un "salto de dominio": abandona la representación algebraica y delega el proceso a la clase \texttt{PackedBit}.
 
 Las etapas principales son:
 
@@ -341,7 +395,7 @@ Las etapas principales son:
   \item Convertir el buffer resultante a vector y extraer los primeros $g$ bits como paridad. Concatenar paridad y mensaje.
 \end{enumerate}
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Proceso de codificación sistemática en \texttt{BCH\_Codec}, calculando los bits de paridad mediante división polinómica.}, label={lst:bch_encode}]
 std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
     if (message.size() != static_cast<size_t>(k))
         throw std::invalid_argument("Message length must be exactly k");
@@ -374,11 +428,13 @@ std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
 }
 \end{lstlisting}
 
+Esta decisión es la responsable de la estabilidad y baja latencia de codificación demostrada en el análisis de resultados, permitiendo procesar bloques de cualquier capacidad correctora $t$ en tiempos cercanos a $1\,\mu s$.
+
 \subsection{Detección de errores mediante síndromes}
 
 Para el proceso de decodificación, el primer paso consiste en calcular el vector de síndromes. Si todos son cero, el bloque recibido es válido; en caso contrario, se detecta la presencia de errores.
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Evaluación de la palabra código recibida en las raíces del generador para computar el vector de síndromes e identificar la presencia de errores.}, label={lst:bch_syndrome}]
 std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received, bool &error) {
     Polynomial r(gf, received);
     std::vector<uint16_t> synd(2 * t + 1, 0);
@@ -448,7 +504,7 @@ El componente \texttt{Channel} modela los principales canales de ruido usados en
 
 La interfaz de \texttt{Channel} se resume en:
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Definición de la clase \texttt{Channel}, encapsulando el generador de números aleatorios para la inyección de ruido.}, label={lst:channel_class}]
 class Channel{
 private:
     std::mt19937 rng; // Generador de numeros aleatorios
@@ -464,7 +520,7 @@ public:
 
 El constructor inicializa \texttt{rng} con una semilla no determinista mediante \texttt{random\_device} para obtener trayectorias de ruido reproducibles solo si se sustituye la semilla.
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Inicialización del generador de entropía \texttt{mt19937} empleando una semilla de \texttt{std::random\_device} en el constructor de \texttt{Channel}.}, label={lst:channel_constructor}]
 Channel::Channel() {
     std::random_device rd;
     rng = std::mt19937(rd());
@@ -475,7 +531,7 @@ Channel::Channel() {
 
 \texttt{applyBSC} aplica fallos independientes por bit con probabilidad \texttt{bit\_error\_rate} usando una distribución de Bernoulli. Valida el parámetro de probabilidad y lanza una excepción si está fuera de rango.
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Implementación del modelo de Canal Simétrico Binario (BSC), invirtiendo bits con una probabilidad dada (\texttt{bit\_error\_rate}).}, label={lst:channel_bsc}]
 std::vector<uint16_t> Channel::applyBSC(const std::vector<uint16_t>& bits, double bit_error_rate) {
     if (bit_error_rate < 0.0 || bit_error_rate > 1.0) {
         throw std::invalid_argument("bit_error_rate must be between 0 and 1");
@@ -495,7 +551,7 @@ std::vector<uint16_t> Channel::applyBSC(const std::vector<uint16_t>& bits, doubl
 
 Para señalización binaria se mapea cada bit en símbolo $+1$ o $-1$ y se añade ruido Gaussiano con desviación estándar calculada a partir de \texttt{$E_s/N_0$}. La función auxiliar \texttt{dbToLinear} convierte dB a escala lineal.
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Conversión de decibelios a escala lineal y generación de muestras contaminadas con ruido blanco gaussiano aditivo (AWGN).}, label={lst:channel_awgn_transmit}]
 double dbToLinear(double db_value) {
     return std::pow(10.0, db_value / 10.0);
 }
@@ -520,7 +576,7 @@ std::vector<double> Channel::transmitAWGN(const std::vector<uint16_t>& bits, dou
 
 La función \texttt{applyAWGNHardDecision} realiza la transmisión AWGN y aplica una decisión dura: si la muestra es $\ge 0$ se interpreta como 0, en caso contrario como 1.
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Conversión de las muestras continuas recibidas del canal AWGN a valores binarios discretos mediante un proceso de decisión dura.}, label={lst:channel_awgn_hard}]
 std::vector<uint16_t> Channel::applyAWGNHardDecision(const std::vector<uint16_t>& bits, double es_n0_db) {
     std::vector<double> samples = transmitAWGN(bits, es_n0_db);
     std::vector<uint16_t> hard_bits; hard_bits.reserve(samples.size());
@@ -545,7 +601,7 @@ La clase \texttt{BCH\_Simulator} actúa como el motor principal del proyecto. Su
 
 Para garantizar la modularidad, los parámetros de entrada se encapsulan en la estructura \texttt{SimulationConfig}, la cual define los parámetros del código ($m, t$), el rango de simulación, y los criterios de parada estadística. De forma análoga, la estructura \texttt{PointResults} consolida las métricas de salida por cada punto de $E_b/N_0$.
 
-\begin{lstlisting}[style=CodigoCPP]
+\begin{lstlisting}[style=CodigoCPP, caption={Definición de las estructuras \texttt{PointResults} y \texttt{SimulationConfig}, encargadas de almacenar las métricas de rendimiento y los parámetros de ejecución del simulador.}, label={lst:estructuras_simulacion}]
 struct PointResults { 
     double ebno_db; 
     double ber;             // Bit Error Rate (Codificado)
@@ -571,7 +627,7 @@ struct SimulationConfig {
 
 \subsection{Motor de Simulación y Paralelización (OpenMP)}
 
-El núcleo computacional del simulador reside en el método \texttt{simulatePoint}, encargado de generar las transmisiones para un valor específico de $E_b/N_0$. Dado que las simulaciones de Monte Carlo para tasas de error bajas (BER $< 10^{-5}$) requieren procesar millones de bloques, este método ha sido paralelizado utilizando OpenMP.
+La mayor carga computacional del simulador recae sobre el método \texttt{simulatePoint}, encargado de generar las transmisiones para un valor específico de $E_b/N_0$. Dado que las simulaciones de Monte Carlo para tasas de error bajas (BER $< 10^{-5}$) requieren procesar millones de bloques, este método ha sido paralelizado utilizando OpenMP.
 
 \subsubsection{Gestión de Concurrencia y Condición de Parada}
 

@@ -221,5 +221,161 @@ Los resultados, representados mediante el diagrama de barras agrupadas de la Fig
 
 \end{itemize}
 
-En conclusión, los resultados evidencian un compromiso de diseño claro: aumentar la capacidad correctora $t$ no solo reduce la tasa de código $R$, sino que incrementa de forma significativa el coste computacional del receptor. Este factor resulta especialmente relevante en aplicaciones donde la eficiencia energética o la latencia del sistema son restricciones críticas.
+En conclusión, los resultados muestran un compromiso de diseño claro: aumentar la capacidad correctora $t$ no solo reduce la tasa de código $R$, sino que incrementa de forma significativa el coste computacional del receptor. Este factor resulta especialmente relevante en aplicaciones donde la eficiencia energética o la latencia del sistema son restricciones críticas.
 
+\section{Evaluación Cualitativa: Impacto Visual en la Transmisión de Imágenes}
+\label{sec:impacto_visual}
+
+Además del análisis estadístico basado en las curvas de rendimiento, resulta de gran utilidad evaluar cualitativamente el impacto del ruido en un escenario práctico de transmisión de datos. Para ello, se ha procesado una imagen en formato de mapa de bits (\texttt{.bmp}) utilizando la configuración $m=7$ y $t=7$. El uso de este formato, que carece de compresión espacial, permite observar de forma directa la degradación a nivel de píxel sin los artefactos que introducen algoritmos como JPEG.
+
+\subsection{Evolución de la corrección frente al ruido}
+
+En esta prueba se comparan las imágenes recibidas a través del canal sin codificar frente a las procesadas por el decodificador BCH para tres valores distintos de relación señal a ruido ($E_b/N_0$), lo que permite observar la evolución en la capacidad de recuperación del sistema.
+
+\begin{figure}[htbp]
+    \centering
+    % Fila 1: 4 dB
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../imagenes/uncoded_EbNo_4_logo_ugr.png}
+        \vspace{0.15cm}
+        
+        {\small a) Sin codificar (4 dB)}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../imagenes/out_EbNo_4_logo_ugr.png}
+        \vspace{0.15cm}
+        
+        {\small b) BCH $t=7$ (4 dB)}
+    \end{minipage}
+
+    \vspace{0.4cm} % Espacio entre filas
+
+    % Fila 2: 5 dB
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../imagenes/uncoded_EbNo_5_logo_ugr.png}
+        \vspace{0.15cm}
+        
+        {\small c) Sin codificar (5 dB)}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../imagenes/out_EbNo_5_logo_ugr.png}
+        \vspace{0.15cm}
+        
+        {\small d) BCH $t=7$ (5 dB)}
+    \end{minipage}
+
+    \vspace{0.4cm} % Espacio entre filas
+
+    % Fila 3: 6 dB
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../imagenes/uncoded_EbNo_6_logo_ugr.png}
+        \vspace{0.15cm}
+        
+        {\small e) Sin codificar (6 dB)}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../imagenes/out_EbNo_6_logo_ugr.png}
+        \vspace{0.15cm}
+        
+        {\small f) BCH $t=7$ (6 dB)}
+    \end{minipage}
+
+    \caption{Comparativa visual de la transmisión de la imagen a 4 dB, 5 dB y 6 dB. Columna izquierda: canal sin codificar. Columna derecha: corrección mediante BCH.}
+    \label{fig:prueba_fases_bch}
+\end{figure}
+\subsubsection{Comportamiento a 4 dB: Corrupción de cabeceras}
+En condiciones de ruido elevado, la transmisión de datos estructurados presenta el problema de la corrupción de metadatos. Como se muestra en la Figura \ref{fig:prueba_fases_bch}a, la imagen sin codificar a $4\text{ dB}$ resulta ilegible para el sistema operativo. Este error se produce porque el ruido altera los bytes correspondientes a la cabecera del formato BMP, lo que impide la correcta lectura del archivo. Por el contrario, el código BCH logra proteger esta información estructural (Figura \ref{fig:prueba_fases_bch}b), permitiendo abrir el archivo y recuperar la imagen. No obstante, la imagen resultante aún presenta ruido visible, dado que la cantidad de errores introducidos por el canal supera en algunas palabras la capacidad correctora de $t=7$.
+
+\subsubsection{Comportamiento a 5 dB: Reducción del error visual}
+Al incrementar la relación señal a ruido a $5\text{ dB}$, la probabilidad de error del canal disminuye. En el caso sin codificar (Figura \ref{fig:prueba_fases_bch}c), la cabecera del archivo no resulta dañada, lo que permite visualizar la imagen y confirmar la presencia de alteraciones aleatorias en los píxeles. Por su parte, la imagen procesada por el decodificador BCH (Figura \ref{fig:prueba_fases_bch}d) evidencia una corrección mayoritaria de la información, eliminando la mayor parte del ruido y dejando únicamente algunos píxeles erróneos residuales.
+
+\subsubsection{Comportamiento a 6 dB: Recuperación completa}
+Para un nivel de $6\text{ dB}$, la transmisión sin codificar (Figura \ref{fig:prueba_fases_bch}e) sigue presentando errores que reduden la calidad final de la imagen. Sin embargo, la decodificación BCH (Figura \ref{fig:prueba_fases_bch}f) es capaz de corregir todos los errores introducidos en la señal. El resultado es una reconstrucción idéntica a la imagen original, alcanzando un estado de cero errores tras el proceso de decodificación.
+
+\subsection{El coste de la redundancia: Degradación por exceso de paridad}
+
+Uno de los fenómenos más notables observados en el análisis estadístico es que, en condiciones de ruido intenso, incrementar la capacidad teórica de corrección ($t$) puede resultar perjudicial. Para ilustrar visualmente este efecto, conocido como penalización por tasa de código (\textit{code rate penalty}), se ha simulado la transmisión de la imagen a un nivel de $E_b/N_0 = 5\text{ dB}$, comparando el canal sin codificar, una configuración equilibrada ($m=7, t=7$) y una de altísima redundancia ($m=7, t=15$).
+
+La Figura \ref{fig:prueba_redundancia} presenta los resultados de esta comparativa.
+
+\begin{figure}[htbp]
+    \centering
+    
+    % Imagen Original
+    \includegraphics[width=0.85\textwidth]{../imagenes/logo_ugr.jpg}
+    \vspace{0.15cm}
+    
+    {\small a) Imagen Original}
+    
+    \vspace{0.4cm} % Espacio entre imágenes
+    
+    % Sin codificar
+    \includegraphics[width=0.85\textwidth]{../imagenes/uncoded_EbNo_5_logo_ugr.png} 
+    \vspace{0.15cm}
+    
+    {\small b) Sin codificar (5 dB)}
+    
+    \vspace{0.4cm}
+    
+    % BCH t=7
+    \includegraphics[width=0.85\textwidth]{../imagenes/out_EbNo_5_m7_t7_logo_ugr.png} 
+    \vspace{0.15cm}
+    
+    {\small c) BCH $t=7$ (5 dB)}
+    
+    \vspace{0.4cm}
+    
+    % BCH t=15
+    \includegraphics[width=0.85\textwidth]{../imagenes/out_EbNo_5_m7_t15_logo_ugr.png} 
+    \vspace{0.15cm}
+    
+    {\small d) BCH $t=15$ (5 dB)}
+
+    \caption{Impacto visual de la penalización por tasa de código a $5\text{ dB}$. Al apilar las imágenes se aprecia claramente cómo la saturación de bits de paridad en $t=15$ genera una imagen más degradada que la propia transmisión sin codificar.}
+    \label{fig:prueba_redundancia}
+\end{figure}
+
+Como se observa al comparar la transmisión sin codificar (Figura \ref{fig:prueba_redundancia}b) con el código BCH de $t=7$ (Figura \ref{fig:prueba_redundancia}c), la configuración equilibrada logra proteger la estructura del archivo y corregir la inmensa mayoría de la señal. La degradación visual es mínima, limitándose a errores residuales muy finos que se manifiestan como puntos de color aislados. 
+
+Sin embargo, el comportamiento verdaderamente interesante se revela en la Figura \ref{fig:prueba_redundancia}d, correspondiente a la configuración $t=15$. A pesar de utilizar el código con la mayor capacidad correctora teórica, el resultado es severamente inferior, cubriendo la imagen con un denso ruido. De hecho, la imagen resultante presenta una calidad visual notablemente peor que la obtenida sin aplicar ninguna codificación.
+
+Esta degradación es consecuencia directa de la baja tasa de código para $t=15$ ($R=0,173$). Para mantener la relación $E_b/N_0$ en $5\text{ dB}$, el simulador físico debe aumentar significativamente la varianza del ruido ($\sigma^2$). Este exceso de ruido de canal provoca que el número de errores físicos por bloque exceda de forma recurrente el límite de 15 bits, haciendo que el algoritmo de Berlekamp-Massey converja hacia polinomios localizadores erróneos. El decodificador procede entonces a invertir bits en posiciones equivocadas, alterando los canales de color del mapa de bits e introduciendo activamente más ruido del que el propio canal habría generado por sí solo.
+
+\subsection{Impacto espacial: Distribución del error según la longitud del bloque}
+
+Como última prueba de evaluación cualitativa, se analiza cómo la geometría matemática del código altera la estructura visual del error en el receptor. En el análisis estadístico de tasas similares, se demostró que los códigos largos presentan caídas abruptas de BER, mientras que los cortos tienen una degradación más suave. Para visualizar este fenómeno, se ha transmitido la imagen a un nivel de $4\text{ dB}$ utilizando dos configuraciones de Tasa Media ($R \approx 0.50$): bloques cortos ($m=5, t=3$) y bloques largos ($m=11, t=93$).
+
+La Figura \ref{fig:prueba_topologia} presenta los resultados de esta comparativa.
+
+\begin{figure}[htbp]
+    \centering
+    
+    % Bloques Cortos (m=5)
+    \includegraphics[width=0.85\textwidth]{../imagenes/out_EbNo_4_m5_t3.png} 
+    \vspace{0.15cm}
+    
+    {\small a) Bloques cortos: BCH $m=5, t=3$ ($n=31$ bits)}
+    
+    \vspace{0.6cm} % Espacio generoso entre imágenes
+    
+    % Bloques Largos (m=11)
+    \includegraphics[width=0.85\textwidth]{../imagenes/out_EbNo_4_m11_t93.png} 
+    \vspace{0.15cm}
+    
+    {\small b) Bloques largos: BCH $m=11, t=93$ ($n=2047$ bits)}
+
+    \caption{Distribución espacial del error a $4\text{ dB}$. Arriba: Ruido fino y disperso debido al fallo de bloques pequeños. Abajo: Errores en ráfaga (rayas horizontales) por el colapso de bloques grandes.}
+    \label{fig:prueba_topologia}
+\end{figure}
+
+Como se observa en la Figura \ref{fig:prueba_topologia}a, la configuración de bloques cortos ($m=5$) genera una distribución de errores fina y dispersa, asimilable a un ruido impulsivo tradicional. Esto se debe a que la longitud de palabra es de apenas $31\text{ bits}$. Cuando el ruido del canal supera la capacidad correctora de $t=3$ y el decodificador falla, la corrupción se limita a unos pocos píxeles adyacentes, distribuyendo el daño de forma homogénea por toda la imagen.
+
+En marcado contraste, la Figura \ref{fig:prueba_topologia}b muestra el resultado para la configuración de bloques largos ($m=11$). Su longitud de palabra es masiva ($2047\text{ bits}$, abarcando decenas de píxeles consecutivos). A $4\text{ dB}$, el sistema se encuentra justo en el límite de su efecto cascada. Cuando un bloque sobrevive, decodifica un segmento de la imagen con absoluta limpieza. Sin embargo, cuando el ruido supera el umbral de $t=93$, el fallo del algoritmo de Berlekamp-Massey corrompe el bloque completo. El resultado visual es la propagación de errores en ráfaga, manifestándose como evidentes rayas o franjas horizontales de ruido intenso intercaladas con franjas de imagen perfecta.
+
+Esta evaluación demuestra que la longitud del bloque ($n$) no solo altera las métricas estadísticas, sino que define cómo se manifiestan realmente los errores en los datos. Este es un factor fundamental que debe tenerse en cuenta dependiendo del tipo de información que se vaya a transmitir.
