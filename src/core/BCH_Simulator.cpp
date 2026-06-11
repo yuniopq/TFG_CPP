@@ -22,14 +22,14 @@ void BCH_Simulator::run() {
 
     // --- MODO FICHERO ---
     if (cfg.use_file) {
-        std::cout << "[FILE] Loading file: " << cfg.input_path << std::endl;
+        std::cout << "[ARCHIVO] Cargando archivo: " << cfg.input_path << std::endl;
         std::vector<uint16_t> file_bits = readFileToBits(cfg.input_path);
-        std::cout << "[FILE] Total bits: " << file_bits.size() << " (" << file_bits.size()/k << " blocks)" << std::endl;
+        std::cout << "[ARCHIVO] Bits totales: " << file_bits.size() << " (" << file_bits.size()/k << " bloques)" << std::endl;
         
         std::vector<uint16_t> corrected_bits, noisy_bits;
         
         // Procesamos la imagen usando ebno_min como punto de inyección de ruido
-        std::cout << "[FILE] Procesando imagen a " << cfg.ebno_min << " dB..." << std::endl;
+        std::cout << "[ARCHIVO] Procesando imagen a " << cfg.ebno_min << " dB..." << std::endl;
         processFile(bch, channel, cfg.ebno_min, file_bits, corrected_bits, noisy_bits);
         
         std::string name_base = cfg.input_path.substr(cfg.input_path.find_last_of("/\\") + 1);
@@ -44,9 +44,9 @@ void BCH_Simulator::run() {
     }
 
     // --- MODO MONTECARLO ESTÁNDAR ---
-    std::cout << "\n=== BCH SIMULATION (" << n << "," << k << ") t=" << cfg.t << " ===" << std::endl;
+    std::cout << "\n=== SIMULACIÓN BCH (" << n << "," << k << ") t=" << cfg.t << " ===" << std::endl;
     std::cout << "------------------------------------------------------------------------" << std::endl;
-    std::cout << std::setw(10) << "Eb/N0(dB)" << std::setw(15) << "BER" << std::setw(15) << "BER_Uncoded" << std::setw(15) << "CWER" << std::setw(15) << "Codewords" << std::endl;
+    std::cout << std::setw(10) << "Eb/N0(dB)" << std::setw(15) << "BER" << std::setw(15) << "BER_Sin_Cod" << std::setw(15) << "CWER" << std::setw(15) << "Bloques" << std::endl;
     std::cout << "------------------------------------------------------------------------" << std::endl;
 
     for (double e = cfg.ebno_min; e <= cfg.ebno_max; e += cfg.step) {
@@ -86,7 +86,7 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
         #pragma omp for schedule(dynamic) reduction(+:total_bit_errors, total_bit_errors_uncoded, total_enc_time, total_dec_time, codewords)
         for (long iter = 0; iter < max_iterations; ++iter) {
             
-            // Comprobación de parada temprana 
+            // Comprobación de parada temprana
             long cur_codeword_errors;
             #pragma omp atomic read
             cur_codeword_errors = total_codeword_errors;
@@ -153,7 +153,7 @@ void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db
     double rate = (double)k / bch.getN();
     double esno_db = ebno_db + 10.0 * log10(rate);
     
-    // Hacemos el reserve estático de memoria antes de abrir los hilos
+    // Reserva estática de memoria antes de lanzar los hilos
     out_corrected.resize(file_bits.size(), 0);
     out_noisy.resize(file_bits.size(), 0);
     
@@ -161,9 +161,9 @@ void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db
     
     #pragma omp parallel
     {
-        // Aislamiento local para evitar condiciones de carrera
+        // Aislamiento local para evitar condiciones de carrera entre hilos
         BCH_Codec local_bch = bch;
-        Channel local_channel; // Al instanciar uno nuevo, coge su propia semilla del SO
+        Channel local_channel; // Al instanciar uno nuevo, obtiene su propia semilla del sistema operativo
         
         #pragma omp for schedule(dynamic)
         for (long iter = 0; iter < num_blocks; ++iter) {
@@ -174,13 +174,13 @@ void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db
             
             // Flujo normal para todo el archivo
             std::vector<uint16_t> encoded = local_bch.encode(message);
-            std::vector<uint16_t> noisy = local_channel.applyAWGNHardDecision(encoded, esno_db);
-            std::vector<uint16_t> noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
+            std::vector<uint16_t> noisy = local_channel.applyBSC(encoded, 0.01);
+            std::vector<uint16_t> noisy_uncoded = local_channel.applyBSC(message, 0.01);
             
             std::vector<uint16_t> decoded;
             local_bch.decode(noisy, decoded);
             
-            // Cada hilo escribe en su propio "trozo" del vector
+            // Cada hilo escribe directamente en su sección asignada del vector
             for (int i = 0; i < k; i++) {
                 out_corrected[base_index + i] = decoded[i];
                 out_noisy[base_index + i] = noisy_uncoded[i];
@@ -188,7 +188,7 @@ void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db
         }
     }
 }
-// Auxiliary methods moved from main into the class
+
 int BCH_Simulator::getDefaultPrimitivePoly(int m) {
     switch (m) {
         case 3:  return 0x0B;
@@ -213,6 +213,7 @@ void BCH_Simulator::exportCSV(int n, int k) {
     mkdir("results/csv", 0777);
     string filename = "results/csv/BCH_m" + to_string(cfg.m) + "_t" + to_string(cfg.t) + ".csv";
     ofstream outfile(filename, ios::trunc);
+    // Se mantiene la cabecera en inglés por compatibilidad con scripts de análisis externos
     outfile << "m,t,n,k,ebno_db,ber,ber_uncoded,cwer,codewords,avg_enc_us,avg_dec_us\n";
     for (const auto& r : all_results) {
         outfile << cfg.m << "," << cfg.t << "," << n << "," << k << "," 
@@ -223,11 +224,10 @@ void BCH_Simulator::exportCSV(int n, int k) {
 }
 
 std::vector<uint16_t> BCH_Simulator::readFileToBits(const std::string& path) {
-
     auto size = std::filesystem::file_size(path);
 
     std::ifstream file(path, std::ios::binary);
-    if (!file) throw std::runtime_error("Could not open file: " + path);
+    if (!file) throw std::runtime_error("No se pudo abrir el archivo: " + path);
 
     std::vector<uint16_t> bits;
     bits.reserve(size * 8);

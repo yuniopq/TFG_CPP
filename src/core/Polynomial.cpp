@@ -59,7 +59,6 @@ Polynomial Polynomial::add(const Polynomial &p2) const
         result_coef[i] = gf.add(c1, c2);
     }
     Polynomial res(gf, result_coef);
-    // res.trim();
     return res;
 }
 
@@ -76,7 +75,6 @@ Polynomial Polynomial::multiply(const Polynomial &p2) const{
         }
     }
     Polynomial res(gf, result_coef);
-    // res.trim();
     return res;
 }
 
@@ -95,7 +93,8 @@ uint16_t Polynomial::evaluate(uint16_t x) {
     if (x == 0) return getCoef(0);
     uint16_t res = 0;
 
-    // Recorremos de mayor a menor grado: res = (...((a_n*x + a_n-1)*x + ...)*x + a_0)
+    // Evaluación mediante el método de Horner de mayor a menor grado:
+    // res = (...((a_n*x + a_n-1)*x + ...)*x + a_0)
     for (int i = getDegree(); i >= 0; i--) {
         res = gf.add(gf.multiply(res, x), getCoef(i));
     }
@@ -112,7 +111,7 @@ void Polynomial::print() {
     for (int i = getDegree(); i >= 0; i--) {
         int c = getCoef(i);
         if (c != 0) {
-            if (!first_term) std::cout << " + "; // Print the + BEFORE the next term
+            if (!first_term) std::cout << " + "; 
             
             if (i == 0) {
                 std::cout << c;
@@ -125,7 +124,7 @@ void Polynomial::print() {
     std::cout << std::endl;
 }
 
-// Remove trailing zero coefficients so degree reflects highest non-zero term
+// Elimina los coeficientes nulos de mayor grado para que el tamaño refleje el grado real
 void Polynomial::trim() {
     while (!coef.empty() && coef.back() == 0) {
         coef.pop_back();

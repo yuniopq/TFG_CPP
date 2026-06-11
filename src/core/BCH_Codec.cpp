@@ -7,13 +7,13 @@ BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
     : m(m), t(t), gf(m, primitive_poly), generator(gf, {}) {
     
     if (m < 1 || m > 15) {
-        throw std::invalid_argument("Invalid BCH parameters: m must be between 1 and 15");
+        throw std::invalid_argument("Parámetros BCH inválidos: m debe estar entre 1 y 15");
     }
 
-    n = (1 << m) - 1;  // 2^m - 1
+    n = (1 << m) - 1;  // n = 2^m - 1
 
     if (t <= 0 || 2LL * t >= n) {
-        throw std::invalid_argument("Invalid BCH parameters: t must satisfy 1 <= 2t < n");
+        throw std::invalid_argument("Parámetros BCH inválidos: t debe cumplir 1 <= 2t < n");
     }
 
     computeGeneratorPolynomial();
@@ -21,13 +21,12 @@ BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
     k = n - generator.getDegree();
     
     if (k <= 0) {
-        throw std::invalid_argument("Invalid BCH parameters: k must be positive");
+        throw std::invalid_argument("Parámetros BCH inválidos: k debe ser positivo");
     }
-    
 }
 
 void BCH_Codec::computeGeneratorPolynomial() {
-    // Initialize generator as polynomial 1
+    // Inicializa el generador como polinomio 1
     generator = Polynomial(gf, std::vector<uint16_t>{1});
     std::unordered_set<uint16_t> processed_exp;
 
@@ -46,82 +45,43 @@ void BCH_Codec::computeGeneratorPolynomial() {
             currExp = (currExp * 2) % n;
         } while (currExp != i);
 
-        // Multiply the accumulated generator by the new minimal polynomial
+        // Multiplica el generador acumulado por el nuevo polinomio mínimo
         generator = generator * mi;
     }
 }
 
-// ============================================================================
-// OLD VERSION (vector<uint16_t>, no bit packing)
-// ============================================================================
-/*
-std::vector<uint16_t> BCH_Codec::encode_OLD(const std::vector<uint16_t>& message) {
-    if (message.size() != static_cast<size_t>(k)) {
-        throw std::invalid_argument("Message length must be exactly k");
-    }
-
-    int g = generator.getDegree();
-
-    // 1. Create extended message: m(x) * x^r
-    std::vector<uint16_t> buffer = message;
-    buffer.insert(buffer.begin(), g, 0); // prepend zeros
-
-    // 2. Polynomial division
-    for (int i = buffer.size() - 1; i >= g; i--) {
-            if (buffer[i] == 1) { // if division is needed
-            for (int j = 0; j <= g; j++) {
-                buffer[i - j] ^= generator.getCoef(g - j);
-            }
-        }
-    }
-
-    // 3. The remainder is the first g bits
-    std::vector<uint16_t> parity(buffer.begin(), buffer.begin() + g);
-
-    // 4. Final codeword: parity + message
-    parity.insert(parity.end(), message.begin(), message.end());
-
-    return parity;
-}
-*/
-// ============================================================================
-// NEW VERSION (PackedBits, optimized)
-// ============================================================================
 std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
     if (message.size() != static_cast<size_t>(k)) {
-        throw std::invalid_argument("Message length must be exactly k");
+        throw std::invalid_argument("La longitud del mensaje debe ser exactamente k");
     }
 
     int g = generator.getDegree();
 
-    // 1. Create extended message: m(x) * x^g with packed bits
+    // 1. Mensaje extendido: m(x) * x^g empaquetado en bits
     std::vector<uint16_t> buffer(g, 0);
     buffer.insert(buffer.end(), message.begin(), message.end());
     PackedBit binaryBuffer(buffer);
 
-    // Binary generator polynomial (coefficients by degree, from 0 to g)
-    // Or so it was thought, but due to a stopping condition in the shift algorithm
-    // The generator polynomial will be as large as the message to send (with parity bits)
+    // Polinomio generador binario
     std::vector<uint16_t> gen_bits(g+1, 0);
     for (int deg = 0; deg <= g; ++deg) {
         gen_bits[deg] = generator.getCoef(deg);
     }
     PackedBit gen_packed(gen_bits);
 
-    // 2. Polynomial division: if MSB is 1, XOR g(x) aligned to the current degree
+    // 2. División polinómica: si el MSB es 1, se aplica XOR con g(x) alineado
     for (int i = buffer.size() - 1; i >= g; --i) {
         if (binaryBuffer.get(i)) {
             size_t shift = (i - g);
-            // binaryBuffer ^= gen_packed << shift;
             binaryBuffer.xorShifted(gen_packed, shift);
         }
     }
 
-    // 3. The remainder is the first g bits
+    // 3. El resto de la división conforma los bits de paridad
     buffer = binaryBuffer.toVector();
     std::vector<uint16_t> parity(buffer.begin(), buffer.begin() + g);
 
-    // 4. Final codeword: parity + message
+    // 4. Palabra código final (sistemática): paridad + mensaje
     parity.insert(parity.end(), message.begin(), message.end());
 
     return parity;
@@ -149,11 +109,12 @@ std::vector<uint16_t> BCH_Codec::encodeLFSR(const std::vector<uint16_t> &message
     parity.insert(parity.end(), message.begin(), message.end());
     return parity;
 }
+
 std::vector<uint16_t> BCH_Codec::encodeHorner(const std::vector<uint16_t> &message) {
     int g_deg = generator.getDegree();
     std::vector<uint16_t> remainder(g_deg, 0);
 
-    // Process the message from highest to lowest degree (Horner)
+    // Procesa el mensaje de mayor a menor grado (Horner)
     for (int i = message.size() - 1; i >= 0; i--) {
         // El bit que "sale" por la izquierda al multiplicar por x
         uint16_t feedback = message[i] ^ remainder[g_deg - 1];
@@ -165,12 +126,12 @@ std::vector<uint16_t> BCH_Codec::encodeHorner(const std::vector<uint16_t> &messa
         remainder[0] = (feedback ? generator.getCoef(0) : 0);
     }
     
-    // At the end, 'remainder' is the division remainder
-    // Combine with the message to form the systematic codeword...
+    // Al finalizar, 'remainder' contiene el resto de la división
     remainder.insert(remainder.end(), message.begin(), message.end());
 
     return remainder;
 }
+
 std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received, bool &error) {
     Polynomial r(gf, received);
     std::vector<uint16_t> synd(2 * t + 1, 0);
@@ -189,43 +150,8 @@ std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received,
     return synd;
 }
 
-// Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t> synd)
-// {
-//     Polynomial B(gf, {1}), C(gf, {1});      
-//     int L=0, shift_m=1, db=1;
-//     for(int i=1; i<=2*t; i++){
-
-//         int d=synd[i];
-
-//         for(int j=1; j<=L; j++){
-//             int term = gf.multiply(C.getCoef(j), synd[i-j]);
-//             d = gf.add(d, term);
-//         }
-
-//         if (d==0){
-//             shift_m++;
-//         } else{
-//             //C(x) = C(x) + d/db * B(x) * x^m
-//             Polynomial tmpC = C;
-//             // Create a polynomial representing d * db_inv * x^m * B(x)
-//             Polynomial correctionPoly(gf, std::vector<uint16_t>(m+1, 0));
-//             correctionPoly.setCoef( shift_m , gf.multiply( d, gf.inverse(db)) );
-//             C = C + ( correctionPoly * B);
-
-//             if (2*L <= i-1){
-//                 db=d;
-//                 L = i - L;
-//                 B = tmpC;
-//                 shift_m=1;
-//             } else{
-//                 shift_m++;
-//             }
-//         }
-//     }
-//     return C;
-// }
 Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
-    // Use vectors directly to avoid Polynomial overhead and trim()
+    // Uso directo de vectores para evitar la sobrecarga de instanciar objetos Polynomial
     std::vector<uint16_t> C(2 * t + 2, 0);
     std::vector<uint16_t> B(2 * t + 2, 0);
     C[0] = 1;
@@ -235,14 +161,7 @@ Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
     uint16_t db = 1; // Discrepancia previa
 
     for (int i = 1; i <= 2 * t; i++) {
-        // 1. Compute discrepancy d
-        // uint16_t d = synd[i];
-        // for (int j = 1; j <= L; j++) {
-        //     if (j < (int)C.size()) {
-        //         d = gf.add(d, gf.multiply(C[j], synd[i - j]));
-        //     }
-        // }
-        // Inside the loop for i = 1 to 2*t
+        // 1. Calcula la discrepancia d
         uint16_t d = synd[i];
         int max_j = std::min(L, (int)C.size() - 1);
         for (int j = 1; j <= max_j; j++) {
@@ -252,16 +171,16 @@ Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
         if (d == 0) {
             shift_m++;
         } else {
-            std::vector<uint16_t> oldC = C; // Copy for B update
+            std::vector<uint16_t> oldC = C;
             
-            // 2. Update C(x) = C(x) + (d/db) * x^shift_m * B(x)
+            // 2. Actualiza C(x) = C(x) + (d/db) * x^shift_m * B(x)
             uint16_t factor = gf.multiply(d, gf.inverse(db));
             
             for (size_t j = 0; j + shift_m < B.size(); j++) {
                 C[j + shift_m] = gf.add(C[j + shift_m], gf.multiply(factor, B[j]));
             }
 
-            // 3. Verify L update
+            // 3. Actualiza la estimación L
             if (2 * L <= i - 1) {
                 L = i - L;
                 B = oldC;
@@ -272,12 +191,13 @@ Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
             }
         }
     }
-    // At the end, the Polynomial constructor will call trim() once
+    // El constructor de Polynomial llamará a trim() automáticamente
     return Polynomial(gf, C);
 }
+
 std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
     if (received.size() != static_cast<size_t>(n)) {
-        throw std::invalid_argument("Received word length must be exactly n");
+        throw std::invalid_argument("La longitud de la palabra recibida debe ser exactamente n");
     }
 
     std::vector<uint16_t> corrected = received;
@@ -289,11 +209,10 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
         Polynomial errorLocator = berlekampMassey(synd);
         int L = errorLocator.getDegree();
         if (L==0 or L>t){
-            std::cerr << "[!] Uncorrectable errors: L=" << L << " and t=" << t << std::endl;
+            std::cerr << "[!] Errores incorregibles: L=" << L << " y t=" << t << std::endl;
         }else{
 
-            // Chien search
-            
+            // Búsqueda de Chien
             std::vector<uint16_t> reg(L+1, 0);
 
             for (int i=0; i<=L; i++){
@@ -305,7 +224,6 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
                 factors[i] = gf.power(2, n-i); // a^(-j)
             }
             
-
             int rootsFound = 0;
             for (int i = 0; i < n and rootsFound < L; i++) {
                 uint16_t sum = 0;
@@ -314,7 +232,7 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
                 }
 
                 if (sum==0){
-                    corrected[i] ^= 1; // Flip the bit at position i
+                    corrected[i] ^= 1; // Invierte el bit erróneo en la posición i
                     rootsFound++;
                 }
 
@@ -324,7 +242,7 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
                 
             }
             if (rootsFound != L){
-                std::cerr << "[!] Warning: Expected " << L << " errors, but found " << rootsFound << std::endl;
+                std::cerr << "[!] Advertencia: Se esperaban " << L << " errores, pero se encontraron " << rootsFound << std::endl;
             }
         }
     }
@@ -334,33 +252,33 @@ std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
 
 bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16_t>& message_out) {
     if (received.size() != static_cast<size_t>(n)) {
-        throw std::invalid_argument("Received word length must be exactly n");
+        throw std::invalid_argument("La longitud de la palabra recibida debe ser exactamente n");
     }
 
     std::vector<uint16_t> corrected = received;
     bool errorsDetected = false;
 
-    // 1. Compute syndromes to detect channel errors
+    // 1. Calcula los síndromes para detectar errores en el canal
     std::vector<uint16_t> synd = syndrome(corrected, errorsDetected);
 
-    // If there are no errors, extract the message and report success
+    // Si no hay errores, se extrae el mensaje directamente
     if (!errorsDetected) {
         message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
-        return true; // Success: clean block
+        return true; // Éxito: bloque limpio
     }
 
-    // 2. If there are errors, apply Berlekamp-Massey
+    // 2. Si hay errores, se aplica Berlekamp-Massey
     Polynomial errorLocator = berlekampMassey(synd);
     int L = errorLocator.getDegree();
 
-    // 3. Mathematical check for uncorrectable errors
+    // 3. Verificación de errores incorregibles
     if (L == 0 || L > t) {
-        // Failure: too many errors. Return the message as-is (with errors)
+        // Fallo: demasiados errores. Se devuelve el mensaje sin corregir
         message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
-        return false; // CWER = 1
+        return false;
     }
 
-    // 4. Chien search to find the error positions
+    // 4. Búsqueda de Chien para encontrar las posiciones de los errores
     std::vector<uint16_t> reg(L + 1, 0);
     for (int i = 0; i <= L; i++) {
         reg[i] = errorLocator.getCoef(i);
@@ -379,33 +297,33 @@ bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16
         }
 
         if (sum == 0) {
-            corrected[i] ^= 1; // Flip the erroneous bit
+            corrected[i] ^= 1; // Invierte el bit erróneo
             rootsFound++;
         }
 
-        // Update registers for the next iteration
+        // Actualiza los registros para la siguiente iteración
         for (int j = 0; j <= L; j++) {
             reg[j] = gf.multiply(reg[j], factors[j]);
         }
     }
 
-    // 5. Integrity check for the Chien search
+    // 5. Comprobación de integridad de la búsqueda de Chien
     if (rootsFound != L) {
-        // Failure: the polynomial said there were L errors, but we found fewer/more.
+        // Fallo: discrepancia entre los errores estimados y los encontrados
         message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
         return false; 
     }
 
-    // 6. Successful decoding (the BCH corrected the block)
+    // 6. Decodificación exitosa
     message_out = std::vector<uint16_t>(corrected.end() - k, corrected.end());
     return true; 
 }
 
 void BCH_Codec::printGeneratorPolynomial() {
     if (generator.getDegree() >= 0) {
-        std::cout << "Generator polynomial (degree " << generator.getDegree() << "): ";
+        std::cout << "Polinomio generador (grado " << generator.getDegree() << "): ";
         generator.print();
     } else {
-        std::cout << "Generator polynomial not initialized" << std::endl;
+        std::cout << "Polinomio generador no inicializado" << std::endl;
     }
 }

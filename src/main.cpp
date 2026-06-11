@@ -16,35 +16,38 @@ SimulationConfig parseArguments(int argc, char* argv[]) {
             cfg.input_path = argv[6];
         }
     }
+    
     int n = (1 << cfg.m) - 1;
-    // If we are not in file mode, estimate the number of codewords needed
+    
+    // Si no estamos en modo fichero, se calcula dinámicamente el número de palabras código
     if (!cfg.use_file) {
-        long long target_bits = 2000000000LL;   // ← Cambia a 2.000 millones de bits
+        long long target_bits = 2000000000LL;   // Volumen objetivo: 2.000 millones de bits
         cfg.max_codewords = target_bits / n;
         
-        // Mínimo para no quedar con muy pocos datos
+        // Acotación inferior para garantizar significancia estadística en códigos cortos
         if (cfg.max_codewords < 50000) cfg.max_codewords = 50000; 
         
-        // Tope superior para no eternizarse en m=15 + t alto
+        // Acotación superior para evitar tiempos de cómputo excesivos en configuraciones exigentes
         if (cfg.max_codewords > 2000000) cfg.max_codewords = 2000000;
     }
+    
     return cfg;
 }
 
 int main(int argc, char* argv[]) {
     try {
-        // Seed for code outside the class RNGs
+        // Inicialización de la semilla para generadores pseudoaleatorios globales
         srand(time(nullptr));
 
-        // 1. Parse configuration
+        // 1. Lectura de parámetros de configuración
         SimulationConfig cfg = parseArguments(argc, argv);
 
-        // 2. Validate basic constraints
+        // 2. Validación de restricciones estructurales del código BCH
         int n_check = (1 << cfg.m) - 1;
-        if (cfg.m < 1 || cfg.m > 15) throw invalid_argument("m must be between 1 and 15");
-        if (cfg.t <= 0 || 2LL * cfg.t >= n_check) throw invalid_argument("t capacity exceeded");
+        if (cfg.m < 1 || cfg.m > 15) throw invalid_argument("m debe estar entre 1 y 15");
+        if (cfg.t <= 0 || 2LL * cfg.t >= n_check) throw invalid_argument("La capacidad de corrección t excede el límite del bloque");
 
-        // 3. Launch simulator
+        // 3. Inicialización y ejecución del simulador
         BCH_Simulator simulator(cfg);
         simulator.run();
 
@@ -52,5 +55,6 @@ int main(int argc, char* argv[]) {
         cerr << "[!] Error: " << e.what() << endl;
         return 1;
     }
+    
     return 0;
 }

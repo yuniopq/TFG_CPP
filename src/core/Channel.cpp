@@ -7,14 +7,14 @@ double dbToLinear(double db_value) {
 }
 
 Channel::Channel() {
-    // Initialize the random number generator with a random seed
+    // Inicializa el generador de números aleatorios con una semilla no determinista
     std::random_device rd;
     rng = std::mt19937(rd());
 }
 
 std::vector<uint16_t> Channel::applyBSC(const std::vector<uint16_t>& bits, double bit_error_rate) {
     if (bit_error_rate < 0.0 || bit_error_rate > 1.0) {
-        throw std::invalid_argument("bit_error_rate must be between 0 and 1");
+        throw std::invalid_argument("bit_error_rate debe estar entre 0 y 1");
     }
 
     std::bernoulli_distribution flip(bit_error_rate);
@@ -37,6 +37,7 @@ std::vector<double> Channel::transmitAWGN(const std::vector<uint16_t>& bits, dou
     std::vector<double> samples;
     samples.reserve(bits.size());
 
+    // Mapeo BPSK: 0 -> +1.0, 1 -> -1.0 y adición de ruido
     for (uint16_t bit : bits) {
         const double symbol = (bit == 0) ? 1.0 : -1.0;
         samples.push_back(symbol + noise(rng));
@@ -50,6 +51,7 @@ std::vector<uint16_t> Channel::applyAWGNHardDecision(const std::vector<uint16_t>
     std::vector<uint16_t> hard_bits;
     hard_bits.reserve(samples.size());
 
+    // Decisión dura: >= 0.0 se interpreta como 0, de lo contrario 1
     for (double sample : samples) {
         hard_bits.push_back(sample >= 0.0 ? 0u : 1u);
     }
