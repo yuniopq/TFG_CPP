@@ -26,7 +26,7 @@ Para compilar y ejecutar este simulador se requiere un entorno que cumpla con lo
 1. **Compilador:** GCC (`g++`) compatible con el estándar **C++17**.
    * *Justificación de C++17:* El simulador utiliza la librería `<filesystem>`.
 2. **Soporte OpenMP:** La biblioteca y los flags de compilación de `OpenMP` deben estar instalados en el sistema.
-3. **Entorno de Ejecución:** Entornos basados en POSIX como Linux o el Subsistema de Windows para Linux (WSL).
+3. **Entorno de Ejecución:** Entornos como Linux o el Subsistema de Windows para Linux (WSL).
 
 ---
 
