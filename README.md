@@ -24,7 +24,7 @@ Este proyecto consiste en un simulador para códigos **Bose-Chaudhuri-Hocquenghe
 Para compilar y ejecutar este simulador se requiere un entorno que cumpla con los siguientes estándares:
 
 1. **Compilador:** GCC (`g++`) compatible con el estándar **C++17**.
-   * *Justificación de C++17:* El simulador utiliza la librería nativa `<filesystem>` (específicamente `std::filesystem::file_size`) en el módulo de lectura de archivos (`BCH_Simulator.cpp`) para la gestión de tamaños en disco de forma portable.
+   * *Justificación de C++17:* El simulador utiliza la librería `<filesystem>`.
 2. **Soporte OpenMP:** La biblioteca y los flags de compilación de `OpenMP` deben estar instalados en el sistema.
 3. **Entorno de Ejecución:** Entornos basados en POSIX como Linux o el Subsistema de Windows para Linux (WSL).
 
