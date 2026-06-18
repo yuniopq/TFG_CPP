@@ -14,8 +14,8 @@ public:
     Channel();
 
     std::vector<uint16_t> applyBSC(const std::vector<uint16_t>& bits, double bit_error_rate);
-    std::vector<double> transmitAWGN(const std::vector<uint16_t>& bits, double eb_n0_db);
-    std::vector<uint16_t> applyAWGNHardDecision(const std::vector<uint16_t>& bits, double eb_n0_db);
+    std::vector<double> transmitAWGN(const std::vector<uint16_t>& bits, double es_n0_db);
+    std::vector<uint16_t> applyAWGNHardDecision(const std::vector<uint16_t>& bits, double es_n0_db);
 
 };
 

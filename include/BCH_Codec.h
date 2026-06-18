@@ -9,37 +9,38 @@
 
 class BCH_Codec {
 private:
-    int m;                          // Degree of GF(2^m)
-    int t;                          // Error-correction capability
-    int n;                          // Code length (2^m - 1)
-    int k;                          // Information bits
-    GaloisField gf;                 // Galois Field
-    Polynomial generator;  // Generator polynomial
+    int m;                          // Grado del cuerpo GF(2^m)
+    int t;                          // Capacidad de corrección de errores
+    int n;                          // Longitud del código (2^m - 1)
+    int k;                          // Bits de información
+    GaloisField gf;                 // Cuerpo de Galois
+    Polynomial generator;           // Polinomio generador
 
     void computeGeneratorPolynomial();
 
 public:
     BCH_Codec(int m, int t, int primitive_poly);
     
-    // Encode: add parity bits to the message
+    // Codificación: añade bits de paridad al mensaje
     std::vector<uint16_t> encode(const std::vector<uint16_t>& message);
 
     std::vector<uint16_t> encodeLFSR(const std::vector<uint16_t> &message);
 
-    std::vector<uint16_t> encodeHorner(const std::vector<uint16_t> &message);
-
+    // Cálculo del síndrome para detección de errores
     std::vector<uint16_t> syndrome(const std::vector<uint16_t>& received, bool &error);
 
+    // Algoritmo de Berlekamp-Massey para el polinomio localizador
     Polynomial berlekampMassey(const std::vector<uint16_t>& syndrome);
-    // Decode: detect and correct errors
-    std::vector<uint16_t> decode(const std::vector<uint16_t>& received);
-    bool decode( const std::vector<uint16_t> &received, std::vector<uint16_t> &msg_out);
-    // Get parameters
+    
+    // Decodificación: detecta y corrige errores
+    bool decode(const std::vector<uint16_t> &received, std::vector<uint16_t> &msg_out);
+    
+    // Obtención de parámetros
     int getN() const { return n; }
     int getK() const { return k; }
     int getT() const { return t; }
     
-    // Debug
+    // Depuración
     void printGeneratorPolynomial();
 };
 

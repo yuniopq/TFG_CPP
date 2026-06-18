@@ -17,17 +17,20 @@ struct PointResults {
     double avg_dec_us;
 };
 
-struct SimulationConfig {
-    int m = 7;
-    int t = 10;
+struct SimulationConfig { 
+    int m = 7; 
+    int t = 10; 
     double ebno_min = 0.0;
-    double ebno_max = 12.0;
-    double step = 1.0;
-    int min_codeword_errors = 100; 
-    long max_codewords = 1000000;  
-    long long target_total_bits = 1e8;
-    bool use_file = false;      
-    std::string input_path = "";     
+    double ebno_max = 12.0; 
+    double step = 1.0; 
+    int min_codeword_errors = 100;
+    long max_codewords = 1000000; 
+    bool use_file = false;
+    std::string input_path = ""; 
+    long long target_bits = 2000000000LL;   // Por defecto 2.000 millones
+    bool quiet = false;                     // Modo silencioso para Python
+    std::string channel_type = "awgn";      // Puede ser "awgn" o "bsc"
+    double bsc_prob = 0.01;                 // Probabilidad de error para el canal BSC
 };
 
 class BCH_Simulator {

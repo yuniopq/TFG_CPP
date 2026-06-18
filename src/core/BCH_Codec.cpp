@@ -1,12 +1,13 @@
 #include <iostream>
 #include <stdexcept>
+#include <cassert>
 #include "BCH_Codec.h"
 #include "PackedBit.h"
 
 BCH_Codec::BCH_Codec(int m, int t, int primitive_poly)
     : m(m), t(t), gf(m, primitive_poly), generator(gf, {}) {
     
-    if (m < 1 || m > 15) {
+    if (m < 3 || m > 15) {
         throw std::invalid_argument("Parámetros BCH inválidos: m debe estar entre 1 y 15");
     }
 
@@ -51,9 +52,7 @@ void BCH_Codec::computeGeneratorPolynomial() {
 }
 
 std::vector<uint16_t> BCH_Codec::encode(const std::vector<uint16_t>& message) {
-    if (message.size() != static_cast<size_t>(k)) {
-        throw std::invalid_argument("La longitud del mensaje debe ser exactamente k");
-    }
+    assert(message.size() == static_cast<size_t>(k) && "Longitud del mensaje incorrecta");
 
     int g = generator.getDegree();
 
@@ -108,28 +107,6 @@ std::vector<uint16_t> BCH_Codec::encodeLFSR(const std::vector<uint16_t> &message
     }
     parity.insert(parity.end(), message.begin(), message.end());
     return parity;
-}
-
-std::vector<uint16_t> BCH_Codec::encodeHorner(const std::vector<uint16_t> &message) {
-    int g_deg = generator.getDegree();
-    std::vector<uint16_t> remainder(g_deg, 0);
-
-    // Procesa el mensaje de mayor a menor grado (Horner)
-    for (int i = message.size() - 1; i >= 0; i--) {
-        // El bit que "sale" por la izquierda al multiplicar por x
-        uint16_t feedback = message[i] ^ remainder[g_deg - 1];
-
-        // Desplazamiento y XOR (La esencia de Horner en campos finitos)
-        for (int j = g_deg - 1; j > 0; j--) {
-            remainder[j] = remainder[j - 1] ^ (feedback ? generator.getCoef(j) : 0);
-        }
-        remainder[0] = (feedback ? generator.getCoef(0) : 0);
-    }
-    
-    // Al finalizar, 'remainder' contiene el resto de la división
-    remainder.insert(remainder.end(), message.begin(), message.end());
-
-    return remainder;
 }
 
 std::vector<uint16_t> BCH_Codec::syndrome(const std::vector<uint16_t> &received, bool &error) {
@@ -195,65 +172,8 @@ Polynomial BCH_Codec::berlekampMassey(const std::vector<uint16_t>& synd) {
     return Polynomial(gf, C);
 }
 
-std::vector<uint16_t> BCH_Codec::decode(const std::vector<uint16_t>& received) {
-    if (received.size() != static_cast<size_t>(n)) {
-        throw std::invalid_argument("La longitud de la palabra recibida debe ser exactamente n");
-    }
-
-    std::vector<uint16_t> corrected = received;
-
-    bool haveErrors;
-    std::vector<uint16_t> synd = syndrome(corrected, haveErrors);
-
-    if (haveErrors){
-        Polynomial errorLocator = berlekampMassey(synd);
-        int L = errorLocator.getDegree();
-        if (L==0 or L>t){
-            std::cerr << "[!] Errores incorregibles: L=" << L << " y t=" << t << std::endl;
-        }else{
-
-            // Búsqueda de Chien
-            std::vector<uint16_t> reg(L+1, 0);
-
-            for (int i=0; i<=L; i++){
-                reg[i] = errorLocator.getCoef(i);
-            }
-
-            std::vector<uint16_t> factors(L + 1);
-            for (int i = 0; i <= L; i++){
-                factors[i] = gf.power(2, n-i); // a^(-j)
-            }
-            
-            int rootsFound = 0;
-            for (int i = 0; i < n and rootsFound < L; i++) {
-                uint16_t sum = 0;
-                for (int j = 0; j <= L; j++){
-                    sum = gf.add(sum, reg[j]);
-                }
-
-                if (sum==0){
-                    corrected[i] ^= 1; // Invierte el bit erróneo en la posición i
-                    rootsFound++;
-                }
-
-                for (int j = 0; j <= L; j++){
-                    reg[j] = gf.multiply(reg[j], factors[j]);
-                }
-                
-            }
-            if (rootsFound != L){
-                std::cerr << "[!] Advertencia: Se esperaban " << L << " errores, pero se encontraron " << rootsFound << std::endl;
-            }
-        }
-    }
-         
-    return std::vector<uint16_t>(corrected.end() - k, corrected.end());
-}
-
 bool BCH_Codec::decode(const std::vector<uint16_t>& received, std::vector<uint16_t>& message_out) {
-    if (received.size() != static_cast<size_t>(n)) {
-        throw std::invalid_argument("La longitud de la palabra recibida debe ser exactamente n");
-    }
+    assert(received.size() == static_cast<size_t>(n) && "Longitud de palabra recibida incorrecta");
 
     std::vector<uint16_t> corrected = received;
     bool errorsDetected = false;

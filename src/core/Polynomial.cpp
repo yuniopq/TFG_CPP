@@ -1,4 +1,5 @@
 #include "Polynomial.h"
+#include <cassert>
 
 Polynomial::Polynomial(const GaloisField &galoisField, const std::vector<uint16_t> &coefficients)
     : coef(coefficients), gf(galoisField) { // Se copia el objeto ligero
@@ -15,32 +16,8 @@ int Polynomial::getDegree() const
 
 uint16_t Polynomial::getCoef(int degree) const
 {
-    if (degree < 0) {
-        return 0;
-    }
-
-    size_t index = static_cast<size_t>(degree);
-    if (index >= coef.size()) {
-        return 0;
-    }
-
-    return coef[index];
-}
-
-int Polynomial::setCoef(int degree, uint16_t value)
-{
-    if (degree < 0) {
-        return -1;
-    }
-
-    size_t index = static_cast<size_t>(degree);
-    if (index >= coef.size()) {
-        coef.resize(index + 1, 0);
-    }
-
-    coef[index] = value;
-    trim();
-    return 0;
+    assert(degree >= 0 && static_cast<size_t>(degree) < coef.size() && "Grado fuera de rango");
+    return coef[static_cast<size_t>(degree)];
 }
 
 Polynomial Polynomial::add(const Polynomial &p2) const

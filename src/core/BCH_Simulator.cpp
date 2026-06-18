@@ -43,22 +43,30 @@ void BCH_Simulator::run() {
         return; 
     }
 
-    // --- MODO MONTECARLO ESTÁNDAR ---
-    std::cout << "\n=== SIMULACIÓN BCH (" << n << "," << k << ") t=" << cfg.t << " ===" << std::endl;
-    std::cout << "------------------------------------------------------------------------" << std::endl;
-    std::cout << std::setw(10) << "Eb/N0(dB)" << std::setw(15) << "BER" << std::setw(15) << "BER_Sin_Cod" << std::setw(15) << "CWER" << std::setw(15) << "Bloques" << std::endl;
-    std::cout << "------------------------------------------------------------------------" << std::endl;
+    // --- MODO MONTECARLO  ---
+    if (!cfg.quiet) {
+        std::cout << "\n=== SIMULACIÓN BCH (" << n << "," << k << ") t=" << cfg.t << " ===" << std::endl;
+        std::cout << "------------------------------------------------------------------------" << std::endl;
+        std::cout << std::setw(10) << "Eb/N0(dB)" << std::setw(15) << "BER" << std::setw(15) << "BER_Sin_Cod" << std::setw(15) << "CWER" << std::setw(15) << "Bloques" << std::endl;
+        std::cout << "------------------------------------------------------------------------" << std::endl;
+    }
 
     for (double e = cfg.ebno_min; e <= cfg.ebno_max; e += cfg.step) {
         PointResults pr = simulatePoint(bch, channel, e);
         all_results.push_back(pr);
         
-        std::cout << std::setw(10) << std::fixed << std::setprecision(1) << e 
-                  << std::setw(15) << std::scientific << std::setprecision(3) << pr.ber 
-                  << std::setw(15) << std::scientific << std::setprecision(3) << pr.ber_uncoded 
-                  << std::setw(15) << pr.cwer 
-                  << std::setw(15) << std::fixed << (long)pr.codewords_simulated 
-                  << std::endl;
+        if (!cfg.quiet) {
+            // Salida en la terminal para humanos
+            std::cout << std::setw(10) << std::fixed << std::setprecision(1) << e 
+                      << std::setw(15) << std::scientific << std::setprecision(3) << pr.ber 
+                      << std::setw(15) << std::scientific << std::setprecision(3) << pr.ber_uncoded 
+                      << std::setw(15) << pr.cwer 
+                      << std::setw(15) << std::fixed << (long)pr.codewords_simulated 
+                      << std::endl;
+        } else {
+            // Salida para Python: EbN0,BER,BER_Uncoded,CWER
+            std::cout << e << "," << pr.ber << "," << pr.ber_uncoded << "," << pr.cwer << std::endl;
+        }
         
         if (pr.cwer == 0) break;
     }
@@ -79,9 +87,10 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
 
     #pragma omp parallel
     {
+        // Aislamiento local para evitar condiciones de carrera entre hilos
         std::mt19937 rng(std::random_device{}());
         BCH_Codec local_bch = bch;
-        Channel local_channel = channel;
+        Channel local_channel; // Instanciamos un canal local para asegurar semillas aleatorias independientes
 
         #pragma omp for schedule(dynamic) reduction(+:total_bit_errors, total_bit_errors_uncoded, total_enc_time, total_dec_time, codewords)
         for (long iter = 0; iter < max_iterations; ++iter) {
@@ -101,8 +110,10 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
             std::vector<uint16_t> encoded = local_bch.encode(message);
             auto enc_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t_enc_start).count();
 
-            // Canal AWGN
+            // El modo Montecarlo (estadístico) fuerza siempre el uso de AWGN
+            // evaluando la degradación de la señal física frente a Eb/N0
             std::vector<uint16_t> noisy = local_channel.applyAWGNHardDecision(encoded, esno_db);
+            std::vector<uint16_t> noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
 
             // Decodificación
             auto t_dec_start = std::chrono::high_resolution_clock::now();
@@ -110,8 +121,7 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
             bool success = local_bch.decode(noisy, decoded);
             auto dec_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t_dec_start).count();
             
-            // Evaluación del canal sin codificar
-            std::vector<uint16_t> noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
+            // Evaluación de errores
             int bit_errors_in_codeword = 0;
             int bit_errors_uncoded_in_codeword = 0;
             
@@ -120,7 +130,7 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
                 if (message[i] != decoded[i]) bit_errors_in_codeword++;
             }
 
-            // Actualización de errores con sección crítica ligera
+            // Actualización de errores con sección crítica ligera (atomic)
             if (!success || bit_errors_in_codeword > 0) {
                 #pragma omp atomic
                 total_codeword_errors++;
@@ -134,6 +144,7 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
         }
     }
 
+    // Cálculo final de promedios para el punto actual
     if (codewords > 0) {
         res.ber = (1.0 * total_bit_errors) / (codewords * k);
         res.ber_uncoded = (1.0 * total_bit_errors_uncoded) / (codewords * k);
@@ -142,10 +153,9 @@ PointResults BCH_Simulator::simulatePoint(BCH_Codec& bch, Channel& channel, doub
         res.avg_dec_us = (1.0 * total_dec_time) / codewords;
     }
     res.codewords_simulated = codewords;
+    
     return res;
-}
-
-void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db, 
+}void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db, 
                                 const std::vector<uint16_t>& file_bits, 
                                 std::vector<uint16_t>& out_corrected,
                                 std::vector<uint16_t>& out_noisy) {
@@ -172,10 +182,20 @@ void BCH_Simulator::processFile(BCH_Codec& bch, Channel& channel, double ebno_db
             std::vector<uint16_t> message(k);
             for (int i = 0; i < k; i++) message[i] = file_bits[base_index + i];
             
-            // Flujo normal para todo el archivo
             std::vector<uint16_t> encoded = local_bch.encode(message);
-            std::vector<uint16_t> noisy = local_channel.applyBSC(encoded, 0.01);
-            std::vector<uint16_t> noisy_uncoded = local_channel.applyBSC(message, 0.01);
+            
+            // Selección dinámica del canal para imágenes/ficheros
+            std::vector<uint16_t> noisy;
+            std::vector<uint16_t> noisy_uncoded;
+
+            if (cfg.channel_type == "bsc") {
+                noisy = local_channel.applyBSC(encoded, cfg.bsc_prob);
+                noisy_uncoded = local_channel.applyBSC(message, cfg.bsc_prob);
+            } else {
+                noisy = local_channel.applyAWGNHardDecision(encoded, esno_db);
+                // Si el canal es AWGN puro, usamos ebno_db para la versión sin codificar
+                noisy_uncoded = local_channel.applyAWGNHardDecision(message, ebno_db);
+            }
             
             std::vector<uint16_t> decoded;
             local_bch.decode(noisy, decoded);
